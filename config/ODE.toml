@@ -1,0 +1,14 @@
+equation = "ODE"
+device   = "cuda"
+seed     = 1234
+n_collosion = 100
+n_boundary = 100
+z_dim    = 1
+noise    = 0.05
+epoch    = 30000
+k1       = 1 
+k2       = 5 
+
+
+
+
