@@ -275,7 +275,9 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
             for j in range(4):
-                ax[i, j].axis("off")
+                # ax[i, j].axis("off")
+                ax[i, j].set_xticks([])
+                ax[i, j].set_yticks([])
                 ax[i, j].set_xlabel(f"${equation.x_names[0]}$")
                 ax[i, j].set_ylabel(f"${equation.x_names[1]}$")
                 ax[i, j].scatter(x_u[:,0], x_u[:,1], c='k', s=1, label=f"given data points")

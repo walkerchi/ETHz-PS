@@ -34,7 +34,7 @@ class Darcy(Equation):
     x_boundary = [[0, 10], [0, 10]]
     has_exact_solution = False
 
-    q = 8.25e-5
+    q = 1.
     u0 = -10
     Ks = 8.25e-4
     ug = 0
@@ -46,15 +46,17 @@ class Darcy(Equation):
 
     @classmethod
     def s(cls,u):
-        return (1 + (cls.alpha * (cls.ug - u))**(1/(1-cls.m)))**(-cls.m)
+        return (1 + (cls.alpha * torch.abs(cls.ug - u))**(1/(1-cls.m)))**(-cls.m)
 
     @classmethod
     def K(cls,u):
-        return cls.Ks * cls.s(u)**(1/2) * (1 - (1 - cls.s(u)**(1/cls.m))**cls.m)**2
+        s = cls.s(u)
+        return torch.sqrt(s) * (1 - (1 - s**(1/cls.m))**cls.m)**2
     
     @classmethod
     def correct_y(cls, y):
-        y[...,1] = cls.ksat * torch.exp(y[...,1])
+        k_index = cls.y_names.index('K')
+        y[...,k_index] = cls.ksat * torch.exp(y[...,k_index])
         return y
     
     @classmethod
@@ -89,7 +91,7 @@ class Darcy(Equation):
         k = k[index]
         x = torch.tensor(x)
         y = torch.tensor(np.concatenate([u,k], 1))
-        y += torch_normal(0, self.noise * y.std(0, keepdim=True),[n, 2])
+        y += torch_normal(0, self.noise * y.std(),[n, self.y_dim])
         return x, y
     
     def generate_collosion_data(self, n = 1000):
@@ -115,18 +117,22 @@ class Darcy(Equation):
 
         self.N_b = 100 
         n = self.N_b
+        # u(x1, x2) = u0                x1 = L1, x2 in [0,L2]
         x1 = torch.stack([
             torch.full([n], self.L1),
             torch_uniform(0, self.L2, [n])
         ], -1)
+        # # -K(u) du(x1, x2) / dx1 = q    x1 = 0, x2 in [0,L2]
         x2 = torch.stack([
             torch.zeros([n]),
             torch_uniform(0, self.L2, [n])
         ], -1)
+        # du(x1, x2)/dx2 = 0            x2 = 0, x1 in [0,L1]
         x3 = torch.stack([
             torch_uniform(0, self.L1, [n]),
             torch.zeros([n])
         ], -1)
+        # du(x1, x2)/dx2 = 0            x2 = L2, x1 in [0,L1]
         x4 = torch.stack([
             torch_uniform(0, self.L1, [n]),
             torch.full([n], self.L2)
@@ -153,7 +159,7 @@ class Darcy(Equation):
         return x, y
 
 
-    def pde_loss(self, y_pred, use_jacobian: bool = False):
+    def pde_loss(self, y_pred):
         """
             gradx (K(u) gradx u(x1,x2)) = 0         x in [0,L1]x[0,L2]
             u(x1, x2) = u0                          x1 = L1
@@ -167,52 +173,44 @@ class Darcy(Equation):
             --------
                 torch.FloatTensor([1])        
         """
+        x1_index = self.x_names.index('x1')
+        x2_index = self.x_names.index('x2')
+        u_index  = self.y_names.index('u')
+        k_index  = self.y_names.index('K')
         y_pred = self.correct_y(y_pred)
+        N_f    = self.N_f - self.N_b * 4
+        ux  = partial_devirative(y_pred, self.x_f_norm, y_index=u_index)
 
-        dudx  = partial_devirative(y_pred, self.x_f_norm, y_index=0)
-        dudxx = partial_devirative(dudx, self.x_f_norm)
-
-
-        _, _, dudx_b2, dudx_b3, dudx_b4 = split(dudx, *[self.N_f - self.N_b * 4, *[self.N_b]*4])
-        dudxx_f, _, _, _, _             = split(dudxx, *[self.N_f - self.N_b * 4, *[self.N_b]*4])
-
-        y_f, y_b1, y_b2, _, _ = split(y_pred, *[self.N_f - self.N_b * 4, *[self.N_b]*4])
+        ux_f, _, ux_b2, ux_b3, ux_b4 = split(ux, *[N_f, *[self.N_b]*4])
+    
+        y_f, y_b1, y_b2, _, _ = split(y_pred, *[N_f,  *[self.N_b]*4])
         # x_f, x_b1, x_b2, x_b3, x_b4 = split(self.x_f_norm, *[self.N_f - self.N_b * 4, *[self.N_b]*4])
        
-        # u_f     = y_f[:, 0]
-        k_f      =  y_f[:, 1]
-        # x1_f    = x_f[:, 0]
-        # x2_f    = x_f[:, 1]
-        ux1x1_f = dudxx_f[:, 0]
-        ux2x2_f = dudxx_f[:, 1]
-        kux1x1_f = k_f * ux1x1_f
-        kux2x2_f = k_f * ux2x2_f
-        # ux1_f   = grad(u_f, x1_f)
-        # ux2_f   = grad(u_f, x2_f)
-        # kux1x1_f = grad(k_f*ux1_f, x1_f)
-        # kux2x2_f = grad(k_f*ux2_f, x2_f)
+        # gradx (K(u) gradx u(x1,x2)) = 0
+        k_f     =  y_f[:, k_index]
+        ux1_f   = ux_f[:, x1_index]
+        ux2_f   = ux_f[:, x2_index]
+        kux1_f  = k_f * ux1_f
+        kux2_f  = k_f * ux2_f
+        kux1x1_f = partial_devirative(kux1_f, self.x_f_norm, x_index=x1_index)[:N_f]
+        kux2x2_f = partial_devirative(kux2_f, self.x_f_norm, x_index=x2_index)[:N_f]
         loss_f   = mse(kux1x1_f + kux2x2_f)
 
-        u_b1    = y_b1[:, 0]
+        # u(x1, x2) = u0                x1 = L1
+        u_b1    = y_b1[:, x1_index]
         loss_b1 = mse(u_b1 - self.u0)
 
-        # x1_b2   = x_b2[:, 0]
-        # u_b2    = y_b2[:, 0]
-        k_b2      = y_b2[:, 1]
-        # ux1_b2  = grad(u_b2, x1_b2)
-        ux1_b2  = dudx_b2[:, 0]
+        # -K(u) du(x1, x2) / dx1 = q    x1 = 0
+        k_b2      = y_b2[:, k_index]
+        ux1_b2  = ux_b2[:, x1_index]
         loss_b2 = mse(self.q + k_b2*ux1_b2)
 
-        # x2_b3   = x_b3[:, 1]
-        # u_b3    = y_b3[:, 0]
-        # ux2_b3  = grad(u_b3, x2_b3)
-        ux2_b3  = dudx_b3[:, 0]
+        # du(x1, x2)/dx2 = 0            x2 = 0    
+        ux2_b3  = ux_b3[:, x2_index]
         loss_b3 = mse(ux2_b3)
 
-        # x2_b4   = x_b4[:, 1]
-        # u_b4    = y_b4[:, 0]
-        # ux2_b4  = grad(u_b4, x2_b4)
-        ux2_b4  = dudx_b4[:, 0]
+        # du(x1, x2)/dx2 = 0            x2 = L2
+        ux2_b4  = ux_b4[:, x2_index]
         loss_b4 = mse(ux2_b4)
         
         return loss_f + loss_b1 + loss_b2 + loss_b3 + loss_b4

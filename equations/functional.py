@@ -39,6 +39,8 @@ def partial_devirative(y, x, y_index=None, x_index=slice(None)):
 def torch_uniform(a, b, size):
     return (b - a) * torch.rand(size) + a
 def torch_normal(mu, sigma, size):
+    if sigma == 0:
+        return torch.full(size, mu)
     return sigma * torch.randn(size) + mu
 def mse(x):
     return (x**2).mean()

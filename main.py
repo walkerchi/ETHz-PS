@@ -91,7 +91,7 @@ def main(args):
     elif args.equation == "Darcy":
         plot_y_distribution_2D(equation, prediction, align="row", show=False).savefig(os.path.join(path,"y_distribution_2D.png"))
         with torch.no_grad():
-            u = torch.linspace(-10, -4, 100)[:, None]
+            u = torch.linspace(-10, -4, 100)[:, None].to(pinn.device)
             k_pred = pinn.P.stage[-1](u)
             k_exact= equation.K(u)
         lineplot(u, k_exact, k_pred, xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))

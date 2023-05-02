@@ -35,8 +35,8 @@ class UQPINN(nn.Module):
         self.z_dim = z_dim
         self.P = p_nn(x_dim + z_dim, y_dim, n_hidden_p, n_layer_p)
         self.Q = MLP(x_dim + y_dim, z_dim, n_hidden_q, n_layer_q)
-        self.T = MLP(x_dim + y_dim, 1, n_hidden_t, n_layer_t)
-
+        # self.T = MLP(x_dim + y_dim, 1, n_hidden_t, n_layer_t)
+        self.T = MLP(x_dim + 1, 1, n_hidden_t, n_layer_t)
     @property
     def device(self):
         return next(self.parameters()).device
@@ -56,7 +56,7 @@ class UQPINN(nn.Module):
 
         z_u_pred = self.Q(torch.cat([x_u, y_u_pred], dim=1))
         # z_f_pred = self.Q(torch.cat([x_f, r_f_pred], dim=1))
-        T_u_pred = self.T(torch.cat([x_u, y_u_pred], dim=1)) 
+        T_u_pred = self.T(torch.cat([x_u, y_u_pred[:,0:1]], dim=1)) 
 
         KL_loss     = T_u_pred.mean()
         Recon_loss  = - (1 - self.lambd) * ((z_u - z_u_pred)**2).mean()
@@ -69,8 +69,8 @@ class UQPINN(nn.Module):
     def discriminator_loss(self, equation, z_f, z_u):
         x_u, y_u = equation.x_u_norm, equation.y_u
         y_u_pred = self.P(torch.cat([x_u, z_u], dim=1))
-        t_u_real = torch.sigmoid(self.T(torch.cat([x_u, y_u], dim=1)))
-        t_u_pred = torch.sigmoid(self.T(torch.cat([x_u, y_u_pred], dim=1)))
+        t_u_real = torch.sigmoid(self.T(torch.cat([x_u, y_u[:,0:1]], dim=1)))
+        t_u_pred = torch.sigmoid(self.T(torch.cat([x_u, y_u_pred[:,0:1]], dim=1)))
 
         loss = - (torch.log(1 - t_u_real + EPS) + torch.log(t_u_pred + EPS)).mean()
 

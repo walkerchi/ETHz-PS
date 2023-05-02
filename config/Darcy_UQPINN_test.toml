@@ -4,5 +4,5 @@ device = "gpu"
 n_collosion = 10000
 n_boundary = 1000
 eval_n_samples = 500
-epoch = 20000
+epoch = 1000
 noise = 0.0
