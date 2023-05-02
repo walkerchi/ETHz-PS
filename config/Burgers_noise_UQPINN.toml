@@ -1,0 +1,6 @@
+equation      = "Burgers"
+n_collosion = 10000
+n_boundary  = 150
+noise         = 0.1
+eval_n_samples = 500
+epoch  = 20000

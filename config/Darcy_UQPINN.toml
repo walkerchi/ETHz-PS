@@ -1,0 +1,7 @@
+equation = "Darcy"
+p_nn = "StackMLP"
+device = "gpu"
+n_collosion = 10000
+n_boundary = 1000
+eval_n_samples = 500
+epoch = 20000

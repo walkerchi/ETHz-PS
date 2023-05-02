@@ -6,9 +6,9 @@ from itertools import chain
 from tqdm import tqdm
 
 if __name__ == '__main__':
-    from utils import MLP
+    from utils import MLP, StackMLP
 else:
-    from .utils import MLP
+    from .utils import MLP, StackMLP
 
 EPS = 1e-8
 np.random.seed(1234)
@@ -26,13 +26,14 @@ class UQPINN(nn.Module):
     def __init__(self, x_dim=1, y_dim=1, z_dim=1,
                  n_layer_p=4, n_layer_q=4, n_layer_t=2,
                  n_hidden_p=50, n_hidden_q=50, n_hidden_t=50, 
+                 p_nn = MLP,
                  lambd=1.5, beta=1.0):
         super().__init__()
 
         self.lambd = lambd
         self.beta = beta
         self.z_dim = z_dim
-        self.P = MLP(x_dim + z_dim, y_dim, n_hidden_p, n_layer_p)
+        self.P = p_nn(x_dim + z_dim, y_dim, n_hidden_p, n_layer_p)
         self.Q = MLP(x_dim + y_dim, z_dim, n_hidden_q, n_layer_q)
         self.T = MLP(x_dim + y_dim, 1, n_hidden_t, n_layer_t)
 
@@ -47,16 +48,21 @@ class UQPINN(nn.Module):
         return self.T.parameters()
 
     def generator_loss(self, equation, z_f, z_u):
+       
         x_u, x_f = equation.x_u_norm, equation.x_f_norm
         y_u_pred = self.P(torch.cat([x_u, z_u], dim=1))
         y_f_pred = self.P(torch.cat([x_f, z_f], dim=1))
-        r_f_pred = equation.pde(y_f_pred, x_f,use_jacobian=True) - equation.f(x_f)
+        pde_loss = equation.pde_loss(y_f_pred)
 
         z_u_pred = self.Q(torch.cat([x_u, y_u_pred], dim=1))
         # z_f_pred = self.Q(torch.cat([x_f, r_f_pred], dim=1))
         T_u_pred = self.T(torch.cat([x_u, y_u_pred], dim=1)) 
 
-        loss = T_u_pred.mean() - (1 - self.lambd) * ((z_u - z_u_pred)**2).mean() + self.beta * (r_f_pred**2).mean()
+        KL_loss     = T_u_pred.mean()
+        Recon_loss  = - (1 - self.lambd) * ((z_u - z_u_pred)**2).mean()
+        PDE_loss    = self.beta * pde_loss
+
+        loss = KL_loss + Recon_loss + PDE_loss
 
         return loss
 
@@ -110,18 +116,29 @@ class UQPINN(nn.Module):
         losses["loss_D"] = np.array(losses["loss_D"])
         return losses
 
-    def predict(self, equation, x, n_samples=2000, batch_size=4):
+    def predict(self, equation, n_samples=2000, batch_size=4):
+        """
+            Parameters:
+            -----------
+                equation: Equation
+                    The equation to solve
+                n_samples: int
+                    Number of samples to generate
+                batch_size: int
+                    Batch size for prediction
+            Returns:
+            --------
+                y: torch.Tensor [n_samples, N_ref, y_dim]
+                    The predicted solution
+        """
         assert n_samples % batch_size == 0
         self.eval()
+        x = equation.norm_x(equation.x_ref)
         y = torch.zeros(n_samples, len(x), equation.y_dim).to(self.device)
         z = torch.zeros(batch_size * len(x), self.z_dim).to(self.device)
-        x = equation.norm_x(x)
         x = x.repeat(batch_size, 1)
         with torch.no_grad():
-            pbar = tqdm(total=n_samples, unit=f"sample")
-            for i in range(0, n_samples, batch_size):
+            for i in tqdm(range(0, n_samples, batch_size), unit=f"sample"):
                 torch.nn.init.normal_(z, mean=0, std=1)
                 y[i:i+batch_size] = self.P(torch.cat([x, z], dim=-1)).reshape([batch_size, -1, equation.y_dim])
-                pbar.update(batch_size)
-        mu, std = y.mean(dim=0), y.std(dim=0)
-        return mu, std
+        return y
