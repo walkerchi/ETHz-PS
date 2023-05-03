@@ -1,7 +1,7 @@
 import torch 
 import numpy as np
 from ..base import Equation
-from ..functional import gradient, partial_devirative, torch_uniform, torch_normal, mse, pi
+from ..functional import gradient, partial_derivative, torch_uniform, torch_normal, mse, pi
 
 def split(tensor, *segments):
     assert sum(segments) == len(tensor)
@@ -95,7 +95,7 @@ class Darcy(Equation):
         y += torch_normal(0, self.noise * y.std(),[n, self.y_dim])
         return x, y
     
-    def generate_collosion_data(self, n = 1000):
+    def generate_collosion_data(self, n):
         """
             Generate collocation data
                 x in [0,L1]x[0,L2]
@@ -178,9 +178,10 @@ class Darcy(Equation):
         x2_index = self.x_names.index('x2')
         u_index  = self.y_names.index('u')
         k_index  = self.y_names.index('K')
+
         y_pred = self.correct_y(y_pred)
         N_f    = self.N_f - self.N_b * 4
-        ux  = partial_devirative(y_pred, self.x_f_norm, y_index=u_index)
+        ux  = partial_derivative(y_pred, self.x_f_norm, y_index=u_index)
 
         ux_f, _, ux_b2, ux_b3, ux_b4 = split(ux, *[N_f, *[self.N_b]*4])
     
@@ -193,12 +194,12 @@ class Darcy(Equation):
         ux2_f   = ux_f[:, x2_index]
         kux1_f  = k_f * ux1_f
         kux2_f  = k_f * ux2_f
-        kux1x1_f = partial_devirative(kux1_f, self.x_f_norm, x_index=x1_index)[:N_f]
-        kux2x2_f = partial_devirative(kux2_f, self.x_f_norm, x_index=x2_index)[:N_f]
+        kux1x1_f = partial_derivative(kux1_f, self.x_f_norm, x_index=x1_index)[:N_f]
+        kux2x2_f = partial_derivative(kux2_f, self.x_f_norm, x_index=x2_index)[:N_f]
         loss_f   = mse(kux1x1_f + kux2x2_f)
 
         # u(x1, x2) = u0                x1 = L1
-        u_b1    = y_b1[:, x1_index]
+        u_b1    = y_b1[:, u_index]
         loss_b1 = mse(u_b1 - self.u0)
 
         # -K(u) du(x1, x2) / dx1 = q    x1 = 0

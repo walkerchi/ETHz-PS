@@ -104,13 +104,19 @@ class UQPINN(nn.Module):
             z_f = torch.randn(equation.N_f, self.z_dim).to(self.device)
 
             for _ in range(k1):
-                optimizer_D.zero_grad()
+                # optimizer_D.zero_grad() 
+                # make it faster
+                for param in self.discriminator_parameters():
+                    param.grad = None
                 loss = self.discriminator_loss(equation, z_f, z_u)
                 loss.backward()
                 optimizer_D.step()
 
             for _ in range(k2):
-                optimizer_G.zero_grad()
+                # optimizer_G.zero_grad()
+                # make it faster
+                for param in self.generator_parameters():
+                    param.grad = None
                 loss = self.generator_loss(equation, z_f, z_u)
                 loss.backward()
                 optimizer_G.step()

@@ -13,7 +13,7 @@ def gradient(y, x):
             torch.Tensor([...y_, x_dim])
     """
     return torch.autograd.grad(y, x, torch.ones_like(y), create_graph=True)[0]
-def partial_devirative(y, x, y_index=None, x_index=slice(None)):
+def partial_derivative(y, x, y_index=None, x_index=slice(None)):
     """
         parital y[y_index] / partial x[x_index]
         if do not pass the y_index and x_index, 
