@@ -93,8 +93,12 @@ def main(args):
         with torch.no_grad():
             u = torch.linspace(-10, -4, 100)[:, None].to(pinn.device)
             k_pred = pinn.P.stage[-1](u)
+            k_pred = equation.correct_k(k_pred)
             k_exact= equation.K(u)
-        lineplot(u, k_exact, k_pred, xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
+        lineplot(u, k_exact, k_pred, 
+                 x_points= equation.y_u[:,equation.y_names.index("u")],
+                 y_points= equation.y_u[:,equation.y_names.index("K")],
+                 xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

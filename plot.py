@@ -238,7 +238,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             ax[i, 1].set_title(f"$\mu({equation.y_names[i]})$")
             ax[i, 2].set_title(f"$\sigma({equation.y_names[i]})$")
             ax[i, 3].set_title(f"$error({equation.y_names[i]})$")
-            h = ax[i, 0].imshow(y_ref[:, :, i].T, 
+            h = ax[i, 0].imshow(y_ref[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -247,7 +247,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 0])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 1].imshow(mu[:, :, i].T, 
+            h = ax[i, 1].imshow(mu[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -256,7 +256,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 1])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 2].imshow(std[:, :, i].T, 
+            h = ax[i, 2].imshow(std[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -265,7 +265,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 2])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 3].imshow(err[:, :, i].T, 
+            h = ax[i, 3].imshow(err[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -294,7 +294,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             ax[i, 0].set_title(f"${equation.y_names[i]}$ exact")
             ax[i, 1].set_title(f"${equation.y_names[i]}$ prediction")
             ax[i, 2].set_title(f"${equation.y_names[i]}$ error")
-            h = ax[i, 0].imshow(y_ref[:, :, i].T, 
+            h = ax[i, 0].imshow(y_ref[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -303,7 +303,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 0])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 1].imshow(mu[:, :, i].T, 
+            h = ax[i, 1].imshow(mu[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -312,7 +312,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 1])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 2].imshow(err[:, :, i].T, 
+            h = ax[i, 2].imshow(err[:, :, i], 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -331,7 +331,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
         plt.show()
     return fig
 
-def lineplot(x, y_exact, y_pred, title="", xlabel="", ylabel="", ax=None, show:bool=False):
+def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel="", ylabel="", ax=None, show:bool=False):
     if isinstance(x, torch.Tensor):
         x = x.detach().cpu().numpy().flatten()
     if isinstance(y_exact, torch.Tensor):
@@ -359,10 +359,15 @@ def lineplot(x, y_exact, y_pred, title="", xlabel="", ylabel="", ax=None, show:b
         assert len(y_pred.shape) == 1
         ax.plot(x, y_pred, label="prediction", color="r", linestyle="--")
     
+    if x_points is not None:
+        assert y_points is not None
+        ax.scatter(x_points, y_points, c="k", s=1, label="given data points")
     ax.legend()
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+
+  
     if show:
         plt.show()
     if create_fig:

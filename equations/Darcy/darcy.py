@@ -39,9 +39,10 @@ class Darcy(Equation):
     Ks = 8.25e-4
     ug = 0
     m = 0.469
-    alpha = 0.01
+    alpha = 0.1
     L1 = 10
     L2 = 10
+
     ksat = 10
 
     @classmethod
