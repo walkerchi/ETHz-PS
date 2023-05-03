@@ -238,7 +238,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             ax[i, 1].set_title(f"$\mu({equation.y_names[i]})$")
             ax[i, 2].set_title(f"$\sigma({equation.y_names[i]})$")
             ax[i, 3].set_title(f"$error({equation.y_names[i]})$")
-            h = ax[i, 0].imshow(y_ref[:, :, i], 
+            h = ax[i, 0].imshow(y_ref[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -247,7 +247,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 0])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 1].imshow(mu[:, :, i], 
+            h = ax[i, 1].imshow(mu[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -256,7 +256,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 1])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 2].imshow(std[:, :, i], 
+            h = ax[i, 2].imshow(std[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -265,7 +265,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 2])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 3].imshow(err[:, :, i], 
+            h = ax[i, 3].imshow(err[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -284,6 +284,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
                 ax[i, j].legend()
                 
     else:
+        prediction = prediction.reshape([ *equation.ref_shape, equation.y_dim])
         if align == "row":
             fig, ax = plt.subplots(nrows=equation.y_dim, ncols=3, figsize=(15,5*equation.y_dim),squeeze=False)
         else:
@@ -294,7 +295,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             ax[i, 0].set_title(f"${equation.y_names[i]}$ exact")
             ax[i, 1].set_title(f"${equation.y_names[i]}$ prediction")
             ax[i, 2].set_title(f"${equation.y_names[i]}$ error")
-            h = ax[i, 0].imshow(y_ref[:, :, i], 
+            h = ax[i, 0].imshow(y_ref[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -303,7 +304,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 0])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 1].imshow(mu[:, :, i], 
+            h = ax[i, 1].imshow(prediction[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -312,7 +313,7 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             divider = make_axes_locatable(ax[i, 1])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 2].imshow(err[:, :, i], 
+            h = ax[i, 2].imshow(err[:, :, i].T, 
                                 interpolation='bicubic', 
                                 cmap='rainbow',
                                 extent=[x1min, x1max, x2min, x2max],
@@ -323,10 +324,10 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
             fig.colorbar(h, cax=cax, orientation='vertical')
             for j in range(3):
                 ax[i, j].axis("off")
-                ax[i].set_xlabel(f"${equation.x_names[0]}$")
-                ax[i].set_ylabel(f"${equation.x_names[1]}$")
-                ax[i].scatter(x_u[:,0], x_u[:,1], c='k', s=1, label=f"given data points")
-                ax[i].legend()
+                ax[i, j].set_xlabel(f"${equation.x_names[0]}$")
+                ax[i, j].set_ylabel(f"${equation.x_names[1]}$")
+                ax[i, j].scatter(x_u[:,0], x_u[:,1], c='k', s=1, label=f"given data points")
+                ax[i, j].legend()
     if show:
         plt.show()
     return fig

@@ -5,7 +5,7 @@ import toml
 import torch
 import numpy as np
 
-from models import UQPINN, MLP, StackMLP
+from models import UQPINN, MLP, StackMLP, PINN
 import equations
 from equations import ODE, Burgers
 from plot import plot_losses, plot_x_y_uncertainty, plot_y_probability_given_x, plot_y_distribution_2D, lineplot
@@ -31,29 +31,32 @@ def main(args):
         os.mkdir(path)
     
     
-    args.p_nn = {
+    args.nn = {
         "MLP":MLP,
         "StackMLP":StackMLP
-    }[args.p_nn]
+    }[args.nn]
     if args.equation == "Darcy":
-        args.p_nn = StackMLP
+        args.nn = StackMLP
 
     equation = Equation(N_u=args.n_boundary,
                         N_f=args.n_collosion,
                         noise=args.noise)
     
-    pinn = UQPINN(x_dim=equation.x_dim, 
-                  y_dim=equation.y_dim, 
-                  z_dim=1,
-                  n_layer_p=args.n_layer_p,
-                  n_layer_q=args.n_layer_q,
-                  n_layer_t=args.n_layer_t,
-                  n_hidden_p=args.n_hidden_p,
-                  n_hidden_q=args.n_hidden_q,
-                  n_hidden_t=args.n_hidden_t,
-                  p_nn  = args.p_nn,
-                  lambd = args.lambd,
-                  beta  = args.beta)
+    pinn = {
+        "uqpinn":UQPINN,
+        "pinn":PINN
+    }[args.model](x_dim=equation.x_dim, 
+        y_dim=equation.y_dim, 
+        z_dim=1,
+        n_layer=args.n_layer,
+        n_layer_q=args.n_layer_q,
+        n_layer_t=args.n_layer_t,
+        n_hidden=args.n_hidden,
+        n_hidden_q=args.n_hidden_q,
+        n_hidden_t=args.n_hidden_t,
+        nn  = args.nn,
+        lambd = args.lambd,
+        beta  = args.beta)
 
     
     if args.eval:
@@ -66,12 +69,12 @@ def main(args):
         if args.device == "gpu":
             equation.cuda()
             pinn.cuda()
-        
+    
         losses = pinn.fit(equation, epoch=args.epoch, k1=args.k1, k2=args.k2, print_every_epoch=args.log_every_epoch, lr=args.lr)
 
         torch.save(pinn.state_dict(), os.path.join(path, f"weight.pth"))
         np.savez(os.path.join(path, "losses.npz"), **losses)
-        
+    
     prediction = pinn.predict(equation, n_samples=args.eval_n_samples, batch_size=args.eval_batch_size)
     fig = plot_losses(losses, show=False)
     fig.savefig(os.path.join(path,"losses.png"))
@@ -84,7 +87,8 @@ def main(args):
             ylabel="$u$", 
             show=False).savefig(os.path.join(path,"x_y_relation_2D.png"))
         # plot_x_y_uncertainty(equation, prediction, show=False).savefig(os.path.join(path,"x_y_uncertainty.png"))
-        plot_y_probability_given_x(equation, prediction,(-0.5, 0.5), show=False).savefig(os.path.join(path,"y_probability_given_x.png"))
+        if prediction.dim() == 3:
+            plot_y_probability_given_x(equation, prediction,(-0.5, 0.5), show=False).savefig(os.path.join(path,"y_probability_given_x.png"))
     elif args.equation == "Burgers":
         plot_y_distribution_2D(equation, prediction, align="col",show=False).savefig(os.path.join(path,"y_distribution_2D.png"))
         plot_x_y_uncertainty(equation, prediction, [{"t":0.25},{"t":0.5},{"t":0.75}], show=False).savefig(os.path.join(path,"x_y_uncertainty.png"))
@@ -92,7 +96,7 @@ def main(args):
         plot_y_distribution_2D(equation, prediction, align="row", show=False).savefig(os.path.join(path,"y_distribution_2D.png"))
         with torch.no_grad():
             u = torch.linspace(-10, -4, 100)[:, None].to(pinn.device)
-            k_pred = pinn.P.stage[-1](u)
+            k_pred = pinn.nn.stage[-1](u)
             k_pred = equation.correct_k(k_pred)
             k_exact= equation.K(u)
         lineplot(u, k_exact, k_pred, 
@@ -115,18 +119,19 @@ if __name__ == '__main__':
     parser.add_argument('-Nu', '--n_boundary', type=int, default=100)
     parser.add_argument('-n', '--noise', type=float, default=0.05)
     parser.add_argument('--z_dim',  type=int, default=1)
-    parser.add_argument('--n_layer_p', type=int, default=4)
+    parser.add_argument('--n_layer', type=int, default=4)
     parser.add_argument('--n_layer_q', type=int, default=4)
     parser.add_argument('--n_layer_t', type=int, default=2)
-    parser.add_argument('--n_hidden_p', type=int, default=50)
+    parser.add_argument('--n_hidden', type=int, default=50)
     parser.add_argument('--n_hidden_q', type=int, default=50)
     parser.add_argument('--n_hidden_t', type=int, default=50)
-    parser.add_argument('--p_nn', type=str, default="MLP", choices=["MLP","StackMLP"])
+    parser.add_argument('--nn', type=str, default="MLP", choices=["MLP","StackMLP"])
     parser.add_argument('--lambd', type=float, default=1.5)
     parser.add_argument('--beta', type=float, default=1.0)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--eval_batch_size', type=int, default=4)
     parser.add_argument('--eval_n_samples', type=int, default=2000)
+    parser.add_argument('-m','--model', type=str, default="uqpinn", choices=["uqpinn", "pinn"])
     args = parser.parse_args()
 
     if args.config is not None:
@@ -145,16 +150,17 @@ if __name__ == '__main__':
         args.n_boundary = config.get('n_boundary', args.n_boundary)
         args.noise = config.get('noise', args.noise)
         args.z_dim = config.get('z_dim', args.z_dim)
-        args.n_layer_p = config.get('n_layer_p', args.n_layer_p)
+        args.n_layer = config.get('n_layer', args.n_layer)
         args.n_layer_q = config.get('n_layer_q', args.n_layer_q)
         args.n_layer_t = config.get('n_layer_t', args.n_layer_t)
-        args.n_hidden_p = config.get('n_hidden_p', args.n_hidden_p)
+        args.n_hidden = config.get('n_hidden', args.n_hidden)
         args.n_hidden_q = config.get('n_hidden_q', args.n_hidden_q)
         args.n_hidden_t = config.get('n_hidden_t', args.n_hidden_t)
-        args.p_nn  = config.get('p_nn', args.p_nn)
+        args.nn  = config.get('nn', args.nn)
         args.lambd = config.get('lambd', args.lambd)
         args.beta = config.get('beta', args.beta)
         args.lr = config.get('lr', args.lr)
+        args.model = config.get('model', args.model)
     
     
     main(args)

@@ -1,0 +1,10 @@
+equation = "ODE"
+n_collosion = 100
+n_boundary = 100
+noise    = 0.05
+epoch    = 3000
+model    = "pinn"
+
+
+
+

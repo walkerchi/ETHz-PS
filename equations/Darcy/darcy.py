@@ -179,7 +179,6 @@ class Darcy(Equation):
         u_index  = self.y_names.index('u')
         k_index  = self.y_names.index('K')
 
-        y_pred = self.correct_y(y_pred)
         N_f    = self.N_f - self.N_b * 4
         ux  = partial_derivative(y_pred, self.x_f_norm, y_index=u_index)
 

@@ -1,0 +1,8 @@
+equation      = "Burgers"
+n_collosion = 10000
+n_boundary  = 150
+noise         = 0.0
+eval_n_samples = 500
+epoch = 5000
+device      = "gpu"
+model       = "pinn"

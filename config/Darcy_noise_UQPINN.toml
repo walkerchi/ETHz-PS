@@ -1,5 +1,5 @@
 equation = "Darcy"
-p_nn = "StackMLP"
+nn = "StackMLP"
 n_collosion = 10000
 n_boundary = 1000
 noise      = 0.05

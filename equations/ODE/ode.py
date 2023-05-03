@@ -111,8 +111,10 @@ class ODE(Equation):
         else:
             return uxx - u**2 * ux
     
-    def pde_loss(self, u, x):
-        return mse(self.pde(u,x, True) - self.f(x))
+    def pde_loss(self, y_f_pred):
+        x = self.x_f_norm
+        y = y_f_pred
+        return mse(self.pde(y, x, True) - self.f(x))
 
     def exact_solution(self, x):
         """

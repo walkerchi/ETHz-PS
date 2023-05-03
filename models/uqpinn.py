@@ -27,22 +27,25 @@ class UQPINN(nn.Module):
         Generator: P(t|x, z) -> 1  |pde(x, z) - f| -> 0
     """
     def __init__(self, x_dim=1, y_dim=1, z_dim=1,
-                 n_layer_p=4, n_layer_q=4, n_layer_t=2,
-                 n_hidden_p=50, n_hidden_q=50, n_hidden_t=50, 
-                 p_nn = MLP,
+                 n_layer=4, n_layer_q=4, n_layer_t=2,
+                 n_hidden=50, n_hidden_q=50, n_hidden_t=50, 
+                 nn = MLP,
                  lambd=1.5, beta=1.0):
         super().__init__()
 
         self.lambd = lambd
         self.beta = beta
         self.z_dim = z_dim
-        self.P = p_nn(x_dim + z_dim, y_dim, n_hidden_p, n_layer_p)
+        self.P = nn(x_dim + z_dim, y_dim, n_hidden, n_layer)
         self.Q = MLP(x_dim + y_dim, z_dim, n_hidden_q, n_layer_q)
         if T_FROM_FIRST_Y:
             self.T = MLP(x_dim + 1, 1, n_hidden_t, n_layer_t)
         else:
             self.T = MLP(x_dim + y_dim, 1, n_hidden_t, n_layer_t)
-        
+    @property
+    def nn(self):
+        return self.P
+    
     @property
     def device(self):
         return next(self.parameters()).device
@@ -58,8 +61,10 @@ class UQPINN(nn.Module):
         x_u, x_f = equation.x_u_norm, equation.x_f_norm
         y_u_pred = self.P(torch.cat([x_u, z_u], dim=1))
         y_f_pred = self.P(torch.cat([x_f, z_f], dim=1))
+        if hasattr(equation, "corrent_y"):
+            y_u_pred = equation.correct_y(y_u_pred)
+            y_f_pred = equation.correct_y(y_f_pred)
         pde_loss = equation.pde_loss(y_f_pred)
-
         z_u_pred = self.Q(torch.cat([x_u, y_u_pred], dim=1))
         # z_f_pred = self.Q(torch.cat([x_f, r_f_pred], dim=1))
         if T_FROM_FIRST_Y:
@@ -78,6 +83,8 @@ class UQPINN(nn.Module):
     def discriminator_loss(self, equation, z_f, z_u):
         x_u, y_u = equation.x_u_norm, equation.y_u
         y_u_pred = self.P(torch.cat([x_u, z_u], dim=1))
+        if hasattr(equation, "corrent_y"):
+            y_u_pred = equation.correct_y(y_u_pred)
         if T_FROM_FIRST_Y:
             t_u_real = torch.sigmoid(self.T(torch.cat([x_u, y_u[:,0:1]], dim=1)))
             t_u_pred = torch.sigmoid(self.T(torch.cat([x_u, y_u_pred[:,0:1]], dim=1)))
