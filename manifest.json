@@ -1,0 +1,15 @@
+{
+  "short_name": "ETHz Case Study 2023",
+  "name": "ETH Zurich Case Study 2023",
+  "icons": [
+    {
+      "src": "ethy.png",
+      "sizes": "192x192",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}
