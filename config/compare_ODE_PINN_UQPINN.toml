@@ -1,0 +1,3 @@
+task = "compare"
+targets = ["pinn","uqpinn"]
+equation = "ODE"

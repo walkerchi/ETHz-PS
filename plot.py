@@ -7,8 +7,70 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 sns.set()
 
+def _lineplot(x, y, ax, label="", color=None, linestyle="-"):
+    """
+        Parameters:
+        -----------
+            x: torch.Tensor [n]
+            y: torch.Tensor [n] or [samples, n]
+    """
+    if isinstance(x, torch.Tensor):
+        x = x.detach().cpu().numpy().flatten()
+    if isinstance(y, torch.Tensor):
+        y = y.detach().cpu().squeeze().numpy()
+    if len(y.shape) == 2:
+        mu, std = y.mean(axis=0), y.std(axis=0)
+        ax.plot(x, mu, label=label, color=color, linestyle=linestyle)
+        ax.fill_between(x, mu-2 * std, mu+ 2 * std, alpha=0.3, color=color, label=f"$2\sigma({label})$")
+    else:
+        assert len(y.shape) == 1
+        ax.plot(x, y, label=label, color=color, linestyle=linestyle)
+
+def _heatmap(data, fig, ax, extent, xabel="", ylabel="", title=""):
+    if isinstance(data, torch.Tensor):
+        data = data.detach().cpu().numpy()
+    h = ax.imshow(data.T, 
+                        interpolation='bicubic', 
+                        cmap='rainbow',
+                        extent=extent,
+                        origin="lower",
+                        aspect="auto")
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(h, cax=cax, orientation='vertical')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel(xabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+
+def _errormaps(exact, pred, fig, ax, extent, xlabel="", ylabel="",prefix="", title=""):
+    if isinstance(exact, torch.Tensor):
+        exact = exact.detach().cpu().numpy()
+    if isinstance(pred, torch.Tensor):
+        pred = pred.detach().cpu().numpy()
+    if len(pred.shape) == 3:
+        assert len(ax) >= 4 
+        mu, std = pred.mean(0), pred.std(0)
+        error   = (exact - mu)
+        _heatmap(exact, fig, ax[0], extent, xlabel, ylabel, prefix+f"${title}$ Exact")
+        _heatmap(mu, fig, ax[1], extent, xlabel, ylabel, prefix+f"$\mu({title})$")
+        _heatmap(std, fig, ax[2], extent, xlabel, ylabel, prefix+f"$\sigma({title})$")
+        _heatmap(error, fig, ax[3], extent, xlabel, ylabel, prefix+"error")
+    elif len(pred.shape) == 2:
+        assert len(ax) >= 3
+        error = (exact - pred)
+        _heatmap(exact, fig, ax[0], extent, xlabel, ylabel, prefix+f"${title}$ Exact")
+        _heatmap(pred, fig, ax[1], extent, xlabel, ylabel, prefix+f"${title}$ Prediction")
+        _heatmap(error, fig, ax[2], extent, xlabel, ylabel, prefix+"error")
+    else:
+        raise NotImplementedError()
+    
 
 def plot_losses(losses, show:bool=True):
+    """
+        losses: Dict[str, List[float]]
+    """
     fig, ax = plt.subplots(figsize=(12, 8))
     for key, value in losses.items():
         ax.plot(value, label=key)
@@ -30,6 +92,8 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
             prediction: the prediction of x_ref from the model
                 torch.FloatTensor([samples, n_ref, y_dim]) or torch.FloatTensor([n_ref, y_dim])
                 if the model is a Bayesian model, then `samples` is the number of samples
+
+                of Dict[str, torch.FloatTensor] 
             condition: List[dict]
                 condition on x_ref
             show: show the figure or not
@@ -38,18 +102,17 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
             fig: the figure
     """
     if hasattr(equation, 'correct_y'):
-        prediction = equation.correct_y(prediction)
-    x_ref = equation.x_ref.detach().cpu().numpy() # [n, x_dim]
-    y_ref = equation.y_ref.detach().cpu().numpy() # [samples, n, y_dim] or [n, y_dim]
-    y_pre = prediction.detach().cpu().numpy()     # [samples, n, y_dim] or [n, y_dim]
+        if isinstance(prediction, dict):
+            for key, value in prediction.items():
+                prediction[key] = equation.correct_y(value)
+        else:
+            prediction = equation.correct_y(prediction)
+    x_ref = equation.x_ref
+    y_ref = equation.y_ref
+    y_pre = prediction
     x_u   = equation.x_u.detach().cpu().numpy() # [n_u, x_dim]
     y_u   = equation.y_u.detach().cpu().numpy() # [n_u, y_dim]
-    y_ref_has_samples = len(y_ref.shape) == 3
-    y_pre_has_samples = len(y_pre.shape) == 3
-    if y_ref_has_samples:
-        y_ref_mu, y_ref_std = y_ref.mean(0), y_ref.std(0)
-    if y_pre_has_samples:
-        y_pre_mu, y_pre_std = y_pre.mean(0), y_pre.std(0)
+
     if condition is None:
         assert equation.x_dim == 1
         x_ref = x_ref[:, 0]
@@ -60,27 +123,13 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
             else:
                 return ax[i]
         for i in range(equation.y_dim):
-
-            if y_ref_has_samples:
-                get_ax(i).plot(x_ref, y_ref_mu[:,i], 'b-', label='Exact')
-                get_ax(i).fill_between(x_ref,
-                                y_ref_mu[:, i]-2*y_ref_std[:, i],
-                                y_ref_mu[:, i]+2*y_ref_std[:, i], 
-                                facecolor='b', 
-                                alpha=0.2, 
-                                label='Two std band')
+            if isinstance(y_pre, dict):
+                _lineplot(x_ref, y_ref[...,i], get_ax(i), label="Exact", color=None, linestyle="-")
+                for key, value in y_pre.items():
+                    _lineplot(x_ref, value[...,i], get_ax(i), label=key, color=None, linestyle="--")
             else:
-                get_ax(i).plot(x_ref, y_ref[:,i], 'b-', label='Exact')
-            if y_pre_has_samples:
-                get_ax(i).plot(x_ref, y_pre_mu[:,i], 'r--', label='Prediction')
-                get_ax(i).fill_between(x_ref,
-                                y_pre_mu[:, i]-2*y_pre_std[:, i],
-                                y_pre_mu[:, i]+2*y_pre_std[:, i], 
-                                facecolor='r', 
-                                alpha=0.2, 
-                                label='Two std band')
-            else:
-                get_ax(i).plot(x_ref, y_pre[:,i], 'r--', label='Prediction')
+                _lineplot(x_ref, y_ref[...,i], get_ax(i), label="Exact", color="b", linestyle="-")
+                _lineplot(x_ref, y_pre[...,i], get_ax(i), label="Prediction", color="r", linestyle="--")
             get_ax(i).set_title(f"${equation.x_names[0]}$-${equation.y_names[i]}$")
             get_ax(i).set_xlabel(f"${equation.x_names[0]}$")
             get_ax(i).set_ylabel(f"${equation.y_names[i]}$")
@@ -99,28 +148,14 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
                     mask = mask & (x_ref[:, x_ind] == v)
                     index.remove(x_ind)
                 index = index[0]
-
-                if y_ref_has_samples:
-                    ax[i, j].plot(x_ref[mask, index], y_ref_mu[mask,i], 'b-', label='Exact')
-                    ax[i, j].fill_between(x_ref[mask],
-                                    y_ref_mu[mask, i]-2*y_ref_std[mask, i],
-                                    y_ref_mu[mask, i]+2*y_ref_std[mask, i], 
-                                    facecolor='b', 
-                                    alpha=0.2, 
-                                    label='Two std band')
+                if isinstance(y_pre, dict):
+                    _lineplot(x_ref[mask, index], y_ref[...,mask, i], ax[i, j], label="Exact", color=None, linestyle="-")
+                    for key, value in y_pre.items():
+                        _lineplot(x_ref, value[...,mask,i], ax[i, j], label=key, color=None, linestyle="--")
                 else:
-                    ax[i, j].plot(x_ref[mask, index], y_ref[mask,i], 'b-', label='Exact')
+                    _lineplot(x_ref, y_ref[...,mask,i], ax[i, j], label="Exact", color="b", linestyle="-")
+                    _lineplot(x_ref, y_pre[...,mask,i], ax[i, j], label="Prediction", color="r", linestyle="--")
 
-                if y_pre_has_samples:
-                    ax[i, j].plot(x_ref[mask, index], y_pre_mu[mask, i], 'r--', label='Prediction')
-                    ax[i, j].fill_between(x_ref[mask, index],
-                                    y_pre_mu[mask, i]-2*y_pre_std[mask, i],
-                                    y_pre_mu[mask, i]+2*y_pre_std[mask, i], 
-                                    facecolor='r', 
-                                    alpha=0.2, 
-                                    label='Two std band')
-                else:
-                    ax[i, j].plot(x_ref[mask, index], y_pre[mask,i], 'r--', label='Prediction')
                 ax[i, j].set_title(" ".join(f"${k}={v}$" for k,v in cond.items()))
                 ax[i, j].set_xlabel(f"${equation.x_names[index]}$")
                 ax[i, j].set_ylabel(f"${equation.y_names[i]}$")
@@ -198,7 +233,7 @@ def plot_y_probability_given_x(equation, prediction, xs=None, show:bool=True):
         plt.show()
     return fig
         
-def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
+def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row", return_ax:bool=False):
     """
         Plot the 2D-distribution of the prediction and the reference.
         Parameters:
@@ -215,151 +250,148 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row"):
     assert align in ["row", "col"]
     assert equation.x_dim == 2
     assert len(equation.ref_shape) == 2
-    if hasattr(equation, "correct_y"):
-        prediction = equation.correct_y(prediction)
+    if hasattr(equation, 'correct_y'):
+        if isinstance(prediction, dict):
+            for key, value in prediction.items():
+                prediction[key] = equation.correct_y(value)
+        else:
+            prediction = equation.correct_y(prediction)
     x_u = equation.x_u.detach().cpu().numpy()
-    prediction = prediction.detach().cpu().numpy()
     x_ref = equation.x_ref.detach().cpu().numpy()
-    y_ref = equation.y_ref.detach().cpu().numpy()
+    y_ref = equation.y_ref
     y_ref = y_ref.reshape([*equation.ref_shape, equation.y_dim])
-    x1min, x1max, x2min, x2max = x_ref[:,0].min(), x_ref[:,0].max(), x_ref[:,1].min(), x_ref[:,1].max()
-    if len(prediction.shape) == 3:
-        prediction = prediction.reshape([-1, *equation.ref_shape, equation.y_dim])
-        mu = prediction.mean(0)
-        std = prediction.std(0)
-        err = np.abs(y_ref - mu)
+    extent = x_ref[:,0].min(), x_ref[:,0].max(), x_ref[:,1].min(), x_ref[:,1].max()
+    
+
+    if isinstance(prediction, dict):
+        y_pre = {}
+        line_size = 3
+        n = len(prediction) if isinstance(prediction, dict) else 1
+        for key, value in prediction.items():
+            if len(value.shape) == 3:
+                y_pre[key] = value.reshape([-1, *equation.ref_shape, equation.y_dim])
+                line_size = 4
+            elif len(value.shape) == 2:
+                y_pre[key] = value.reshape([*equation.ref_shape, equation.y_dim])
+            else:
+                raise NotImplementedError()
+        if align == "row":
+            fig, ax = plt.subplots(facecolor="white", nrows=equation.y_dim*n, ncols=line_size, figsize=(5*line_size,5*equation.y_dim),squeeze=False)
+        else:
+            fig, ax = plt.subplots(facecolor="white",ncols=equation.y_dim*n, nrows=line_size, figsize=(12*equation.y_dim,6*line_size),squeeze=False)
+            ax      = ax.T
+        for i in range(0, equation.y_dim*n, n):
+            for j in range(n):
+                key = list(prediction.keys())[j]
+                _errormaps(y_ref[...,i], 
+                    y_pre[key][..., i], 
+                    fig,
+                    ax=ax[i+j], 
+                    extent=extent,
+                    prefix =key+" ",
+                    title=equation.y_names[i], 
+                    xlabel=f"${equation.x_names[0]}$", 
+                    ylabel=f"${equation.x_names[1]}$")
+        
+                for k in range(len(y_pre[key].shape)):
+                    ax[i+j, k].scatter(x_u[:,0], x_u[:,1], c='k', s=1, label=f"given data points")
+                    ax[i+j, k].legend()
+                for k in range(len(y_pre[key].shape), line_size):
+                    ax[i+j, k].axis("off")
+                    
+    else:
+        if len(prediction.shape) == 3:
+            line_size = 4 
+            prediction = prediction.reshape([-1, *equation.ref_shape, equation.y_dim])
+        elif len(prediction.shape) == 2:
+            line_size = 3
+            prediction = prediction.reshape([*equation.ref_shape, equation.y_dim])
+        else:
+            raise NotImplementedError()
         if align == "row":
             fig, ax = plt.subplots(nrows=equation.y_dim, ncols=4, figsize=(20,5*equation.y_dim),squeeze=False)
         else:
             fig, ax = plt.subplots(ncols=equation.y_dim, nrows=4, figsize=(12*equation.y_dim,24),squeeze=False)
             ax      = ax.T
-        for i in range(equation.y_dim):
-            ax[i, 0].set_title(f"${equation.y_names[i]}$ exact")
-            ax[i, 1].set_title(f"$\mu({equation.y_names[i]})$")
-            ax[i, 2].set_title(f"$\sigma({equation.y_names[i]})$")
-            ax[i, 3].set_title(f"$error({equation.y_names[i]})$")
-            h = ax[i, 0].imshow(y_ref[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 0])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 1].imshow(mu[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 1])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 2].imshow(std[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 2])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 3].imshow(err[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 3])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            for j in range(4):
-                # ax[i, j].axis("off")
-                ax[i, j].set_xticks([])
-                ax[i, j].set_yticks([])
-                ax[i, j].set_xlabel(f"${equation.x_names[0]}$")
-                ax[i, j].set_ylabel(f"${equation.x_names[1]}$")
+        for i in range(0,equation.y_dim):
+            _errormaps(y_ref[...,i], 
+                prediction[..., i], 
+                fig,
+                ax=ax[i], 
+                extent=extent, 
+                title=equation.y_names[i], 
+                xlabel=f"${equation.x_names[0]}$", 
+                ylabel=f"${equation.x_names[1]}$")
+            for j in range(len(prediction.shape)):
                 ax[i, j].scatter(x_u[:,0], x_u[:,1], c='k', s=1, label=f"given data points")
                 ax[i, j].legend()
-                
-    else:
-        prediction = prediction.reshape([ *equation.ref_shape, equation.y_dim])
-        if align == "row":
-            fig, ax = plt.subplots(nrows=equation.y_dim, ncols=3, figsize=(15,5*equation.y_dim),squeeze=False)
-        else:
-            fig, ax = plt.subplots(ncols=equation.y_dim, nrows=3, figsize=(12*equation.y_dim,18),squeeze=False)
-            ax      = ax.T
-        err = np.abs(y_ref - prediction)
-        for i in range(equation.y_dim):
-            ax[i, 0].set_title(f"${equation.y_names[i]}$ exact")
-            ax[i, 1].set_title(f"${equation.y_names[i]}$ prediction")
-            ax[i, 2].set_title(f"${equation.y_names[i]}$ error")
-            h = ax[i, 0].imshow(y_ref[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 0])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 1].imshow(prediction[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 1])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            h = ax[i, 2].imshow(err[:, :, i].T, 
-                                interpolation='bicubic', 
-                                cmap='rainbow',
-                                extent=[x1min, x1max, x2min, x2max],
-                                origin="lower",
-                                aspect="auto")
-            divider = make_axes_locatable(ax[i, 2])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(h, cax=cax, orientation='vertical')
-            for j in range(3):
-                ax[i, j].axis("off")
-                ax[i, j].set_xlabel(f"${equation.x_names[0]}$")
-                ax[i, j].set_ylabel(f"${equation.x_names[1]}$")
-                ax[i, j].scatter(x_u[:,0], x_u[:,1], c='k', s=1, label=f"given data points")
-                ax[i, j].legend()
+            
     if show:
         plt.show()
+    if return_ax:
+        return fig, ax
     return fig
 
-def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel="", ylabel="", ax=None, show:bool=False):
-    if isinstance(x, torch.Tensor):
-        x = x.detach().cpu().numpy().flatten()
-    if isinstance(y_exact, torch.Tensor):
-        y_exact = y_exact.detach().cpu().squeeze().numpy()
-    if isinstance(y_pred, torch.Tensor):
-        y_pred = y_pred.detach().cpu().squeeze().numpy()
-    if ax is None:
-        create_fig = True
-        fig, ax = plt.subplots(figsize=(10,10))
-    else:
-        create_fig = False
-    if len(y_exact.shape) == 2:
-        mu, std  = y_exact.mean(axis=0), y_exact.std(axis=0)
-        ax.plot(x, mu, label="exact", color="b", linestyle="-")
-        ax.fill_between(x, mu-2 * std, mu+ 2 * std, alpha=0.3, color="b", label="two std band")
-    else:
-        assert len(y_exact.shape) == 1
-        ax.plot(x, y_exact, label="exact", color="b", linestyle="-")
+def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel="", ylabel="", show:bool=False):
+    """
+        Parameters:
+        ----------
+        x: torch.Tensor or numpy.ndarray [n]
+            x-axis values
+        y_exact: torch.Tensor or numpy.ndarray [n] or [samples, n]
+            exact y-axis values
+        y_pred: torch.Tensor or numpy.ndarray [n] or [samples, n] or Dict[str, torch.Tensor or numpy.ndarray [n] or [samples, n]]
+            predicted y-axis values
+        x_points: torch.Tensor or numpy.ndarray [m]
+            x-axis values of given data points
+        y_points: torch.Tensor or numpy.ndarray [m] or [samples, m]
+            y-axis values of given data points
+        title: str
+            title of the plot
+        xlabel: str
+            label of the x-axis
+        ylabel: str
+            label of the y-axis
+        show: bool
+            whether to show the plot
 
-    if len(y_pred.shape) == 2:
-        mu, std = y_pred.mean(axis=0), y_pred.std(axis=0)
-        ax.plot(x, mu, label="prediction", color="r", linestyle="--")
-        ax.fill_between(x, mu-2 * std, mu+ 2 * std, alpha=0.3, color="r", label="two std band")
-    else:
-        assert len(y_pred.shape) == 1
-        ax.plot(x, y_pred, label="prediction", color="r", linestyle="--")
+        Returns:
+        ----------
+        fig: matplotlib.figure.Figure
+
+    """
+    # if isinstance(x, torch.Tensor):
+    #     x = x.detach().cpu().numpy().flatten()
+    # if isinstance(y_exact, torch.Tensor):
+    #     y_exact = y_exact.detach().cpu().squeeze().numpy()
+    # if isinstance(y_pred, torch.Tensor):
+    #     y_pred = y_pred.detach().cpu().squeeze().numpy()
+    # if len(y_exact.shape) == 2:
+    #     mu, std  = y_exact.mean(axis=0), y_exact.std(axis=0)
+    #     ax.plot(x, mu, label="exact", color="b", linestyle="-")
+    #     ax.fill_between(x, mu-2 * std, mu+ 2 * std, alpha=0.3, color="b", label="two std band")
+    # else:
+    #     assert len(y_exact.shape) == 1
+    #     ax.plot(x, y_exact, label="exact", color="b", linestyle="-")
+
+    # if len(y_pred.shape) == 2:
+    #     mu, std = y_pred.mean(axis=0), y_pred.std(axis=0)
+    #     ax.plot(x, mu, label="prediction", color="r", linestyle="--")
+    #     ax.fill_between(x, mu-2 * std, mu+ 2 * std, alpha=0.3, color="r", label="two std band")
+    # else:
+    #     assert len(y_pred.shape) == 1
+    #     ax.plot(x, y_pred, label="prediction", color="r", linestyle="--")
     
+    fig, ax = plt.subplots(figsize=(10,10))
+
+    if isinstance(y_pred, dict):
+        _lineplot(x, y_exact, ax= ax, label="exact", color=None, linestyle="--")
+        for k,v in y_pred.items():
+            _lineplot(x, v, ax= ax, label=f"{k} prediction", color=None, linestyle="--")
+    else:
+        _lineplot(x, y_exact, ax= ax, label="exact", color="b", linestyle="--")
+        _lineplot(x, y_pred, ax= ax, label="prediction", color="r", linestyle="--")
+
     if x_points is not None:
         assert y_points is not None
         ax.scatter(x_points, y_points, c="k", s=1, label="given data points")
@@ -371,9 +403,8 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
   
     if show:
         plt.show()
-    if create_fig:
-        return fig
-    else:
-        return ax    
+    return fig 
+    
+
 
 

@@ -17,36 +17,20 @@ def manul_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
-def main(args):
-
-    manul_seed(args.seed)
-
-    Equation = getattr(equations, args.equation)
-
-    path = "output"
-    if not os.path.exists(path):
-        os.mkdir(path)
-    path = os.path.join(path, args.config)
-    if not os.path.exists(path):
-        os.mkdir(path)
-    
-    
-    args.nn = {
-        "MLP":MLP,
-        "StackMLP":StackMLP
-    }[args.nn]
+def build_model(args):
+    if isinstance(args.nn, str):
+        args.nn = {
+            "MLP":MLP,
+            "StackMLP":StackMLP
+        }[args.nn]
     if args.equation == "Darcy":
         args.nn = StackMLP
-
-    equation = Equation(N_u=args.n_boundary,
-                        N_f=args.n_collosion,
-                        noise=args.noise)
-    
-    pinn = {
+    Equation = getattr(equations, args.equation)
+    model =  {
         "uqpinn":UQPINN,
         "pinn":PINN
-    }[args.model](x_dim=equation.x_dim, 
-        y_dim=equation.y_dim, 
+    }[args.model](x_dim=Equation.x_dim, 
+        y_dim=Equation.y_dim, 
         z_dim=1,
         n_layer=args.n_layer,
         n_layer_q=args.n_layer_q,
@@ -57,6 +41,56 @@ def main(args):
         nn  = args.nn,
         lambd = args.lambd,
         beta  = args.beta)
+    return model
+
+def build_equation(args):
+    Equation = getattr(equations, args.equation)
+    equation = Equation(N_u=args.n_boundary,
+                        N_f=args.n_collosion,
+                        noise=args.noise)
+    return equation
+
+def main(args):
+
+    manul_seed(args.seed)
+
+    # Equation = getattr(equations, args.equation)
+
+    path = "output"
+    if not os.path.exists(path):
+        os.mkdir(path)
+    path = os.path.join(path, args.config)
+    if not os.path.exists(path):
+        os.mkdir(path)
+    
+    equation = build_equation(args)
+    pinn = build_model(args)
+    # args.nn = {
+    #     "MLP":MLP,
+    #     "StackMLP":StackMLP
+    # }[args.nn]
+    # if args.equation == "Darcy":
+    #     args.nn = StackMLP
+
+    # equation = Equation(N_u=args.n_boundary,
+    #                     N_f=args.n_collosion,
+    #                     noise=args.noise)
+    
+    # pinn = {
+    #     "uqpinn":UQPINN,
+    #     "pinn":PINN
+    # }[args.model](x_dim=equation.x_dim, 
+    #     y_dim=equation.y_dim, 
+    #     z_dim=1,
+    #     n_layer=args.n_layer,
+    #     n_layer_q=args.n_layer_q,
+    #     n_layer_t=args.n_layer_t,
+    #     n_hidden=args.n_hidden,
+    #     n_hidden_q=args.n_hidden_q,
+    #     n_hidden_t=args.n_hidden_t,
+    #     nn  = args.nn,
+    #     lambd = args.lambd,
+    #     beta  = args.beta)
 
     
     if args.eval:
@@ -104,6 +138,58 @@ def main(args):
                  y_points= equation.y_u[:,equation.y_names.index("K")],
                  xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
 
+def compare(args):
+    manul_seed(args.seed)
+    targets = ["pinn", "uqpinn"]
+    predictions = {}
+    losses = {}
+    models = []
+    equation = build_equation(args)
+    for target in targets:
+        args.model = target
+        model = build_model(args)
+        models.append(model)
+        path = os.path.join("output", f"{args.equation}_{target}", "weight.pth")
+        model.load_state_dict(torch.load(path, map_location="cpu"))
+        loss = np.load(os.path.join("output", f"{args.equation}_{target}", "losses.npz"), allow_pickle=True)
+        loss = dict(loss)
+        for k,v in loss.copy().items():
+            loss[f"{target} {k}"] = loss.pop(k)
+        losses = {**losses, **loss}
+        prediction = model.predict(equation, n_samples=args.eval_n_samples, batch_size=args.eval_batch_size)
+        predictions[target] = prediction
+
+    equation = build_equation(args)
+
+    path = os.path.join("output", f"compare_{args.equation}_{'_'.join(targets)}")
+    if not os.path.exists(path):
+        os.mkdir(path)
+    plot_losses(losses, show=False).savefig(os.path.join(path,"losses.png"))
+    if args.equation == "ODE":
+        lineplot(
+            equation.x_ref, 
+            equation.y_ref,
+            predictions,
+            xlabel="$x$", 
+            ylabel="$u$", 
+            show=False).savefig(os.path.join(path,"x_y_relation_2D.png"))
+    elif args.equation == "Burgers":
+        plot_y_distribution_2D(equation, predictions, align="col",show=False).savefig(os.path.join(path,"y_distribution_2D.png"))
+    elif args.equation == "Darcy":
+        plot_y_distribution_2D(equation, prediction, align="row", show=False).savefig(os.path.join(path,"y_distribution_2D.png"))
+        with torch.no_grad():
+            u = torch.linspace(-10, -4, 100)[:, None]
+            k_exact= equation.K(u)
+            k_pred = {}
+            for key,model in zip(targets,models):
+                k_pred[key] =  equation.correct_k(model.nn.stage[-1](u))
+        lineplot(u, k_exact, k_pred, 
+                 x_points= equation.y_u[:,equation.y_names.index("u")],
+                 y_points= equation.y_u[:,equation.y_names.index("K")],
+                 xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default=None, required=True)
@@ -132,8 +218,11 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', type=int, default=4)
     parser.add_argument('--eval_n_samples', type=int, default=2000)
     parser.add_argument('-m','--model', type=str, default="uqpinn", choices=["uqpinn", "pinn"])
+    parser.add_argument("-t","--task", default="main", choices=["main", "compare"])
+    parser.add_argument("--targets", nargs="+", default=["pinn", "uqpinn"])
     args = parser.parse_args()
 
+ 
     if args.config is not None:
         with open(os.path.join("config", args.config + ".toml")) as f:
             config = toml.load(f)
@@ -161,6 +250,12 @@ if __name__ == '__main__':
         args.beta = config.get('beta', args.beta)
         args.lr = config.get('lr', args.lr)
         args.model = config.get('model', args.model)
+        args.task = config.get('task', args.task)
+        args.targets = config.get('targets', args.targets)
     
-    
-    main(args)
+
+    {
+        "main":main,
+        "compare":compare
+    }[args.task](args)
+ 
