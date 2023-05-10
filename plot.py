@@ -413,6 +413,10 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
 
     if x_points is not None:
         assert y_points is not None
+        if isinstance(x_points, torch.Tensor):
+            x_points = x_points.detach().cpu().numpy().flatten()
+        if isinstance(y_points, torch.Tensor):
+            y_points = y_points.detach().cpu().numpy().flatten()
         ax.scatter(x_points, y_points, c="k", s=1, label="given data points")
     ax.legend()
     ax.set_title(title)
