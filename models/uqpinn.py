@@ -15,7 +15,7 @@ np.random.seed(1234)
 torch.manual_seed(1234)
 
 
-T_FROM_FIRST_Y = True
+T_FROM_FIRST_Y = False
 
 class UQPINN(nn.Module):
     """
@@ -29,7 +29,7 @@ class UQPINN(nn.Module):
     def __init__(self, x_dim=1, y_dim=1, z_dim=1,
                  n_layer=4, n_layer_q=4, n_layer_t=2,
                  n_hidden=50, n_hidden_q=50, n_hidden_t=50, 
-                 nn = MLP,
+                 nn = MLP, k_dim=None,
                  lambd=1.5, beta=1.0):
         super().__init__()
 
@@ -37,11 +37,12 @@ class UQPINN(nn.Module):
         self.beta = beta
         self.z_dim = z_dim
         self.P = nn(x_dim + z_dim, y_dim, n_hidden, n_layer)
-        self.Q = MLP(x_dim + y_dim, z_dim, n_hidden_q, n_layer_q)
-        if T_FROM_FIRST_Y:
-            self.T = MLP(x_dim + 1, 1, n_hidden_t, n_layer_t)
-        else:
-            self.T = MLP(x_dim + y_dim, 1, n_hidden_t, n_layer_t)
+        self.k_dim = k_dim
+        self.actual_y_dim = y_dim if k_dim is None else y_dim - k_dim
+        self.Q = MLP(x_dim + self.actual_y_dim, z_dim, n_hidden_q, n_layer_q)
+        self.T = MLP(x_dim + self.actual_y_dim, 1, n_hidden_t, n_layer_t)
+    
+      
     @property
     def nn(self):
         return self.P
@@ -61,16 +62,10 @@ class UQPINN(nn.Module):
         x_u, x_f = equation.x_u_norm, equation.x_f_norm
         y_u_pred = self.P(torch.cat([x_u, z_u], dim=1))
         y_f_pred = self.P(torch.cat([x_f, z_f], dim=1))
-        if hasattr(equation, "corrent_y"):
-            y_u_pred = equation.correct_y(y_u_pred)
-            y_f_pred = equation.correct_y(y_f_pred)
         pde_loss = equation.pde_loss(y_f_pred)
+        y_u_pred = y_u_pred[:, :self.actual_y_dim]
         z_u_pred = self.Q(torch.cat([x_u, y_u_pred], dim=1))
-        # z_f_pred = self.Q(torch.cat([x_f, r_f_pred], dim=1))
-        if T_FROM_FIRST_Y:
-            T_u_pred = self.T(torch.cat([x_u, y_u_pred[:,0:1]], dim=1)) 
-        else:
-            T_u_pred = self.T(torch.cat([x_u, y_u_pred], dim=1))
+        T_u_pred = self.T(torch.cat([x_u, y_u_pred], dim=1))
 
         KL_loss     = T_u_pred.mean()
         Recon_loss  = - (1 - self.lambd) * ((z_u - z_u_pred)**2).mean()
@@ -83,14 +78,10 @@ class UQPINN(nn.Module):
     def discriminator_loss(self, equation, z_f, z_u):
         x_u, y_u = equation.x_u_norm, equation.y_u
         y_u_pred = self.P(torch.cat([x_u, z_u], dim=1))
-        if hasattr(equation, "corrent_y"):
-            y_u_pred = equation.correct_y(y_u_pred)
-        if T_FROM_FIRST_Y:
-            t_u_real = torch.sigmoid(self.T(torch.cat([x_u, y_u[:,0:1]], dim=1)))
-            t_u_pred = torch.sigmoid(self.T(torch.cat([x_u, y_u_pred[:,0:1]], dim=1)))
-        else:
-            t_u_real = self.T(torch.cat([x_u, y_u], dim=1))
-            t_u_pred = self.T(torch.cat([x_u, y_u_pred], dim=1))
+        y_u_pred = y_u_pred[:, :self.actual_y_dim]
+
+        t_u_real = torch.sigmoid(self.T(torch.cat([x_u, y_u], dim=1)))
+        t_u_pred = torch.sigmoid(self.T(torch.cat([x_u, y_u_pred], dim=1)))
 
         loss = - (torch.log(1 - t_u_real + EPS) + torch.log(t_u_pred + EPS)).mean()
 
@@ -167,4 +158,6 @@ class UQPINN(nn.Module):
             for i in tqdm(range(0, n_samples, batch_size), unit=f"sample"):
                 torch.nn.init.normal_(z, mean=0, std=1)
                 y[i:i+batch_size] = self.P(torch.cat([x, z], dim=-1)).reshape([batch_size, -1, equation.y_dim])
+        if self.k_dim is not None:
+            y = equation.correct_y(y)
         return y

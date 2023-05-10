@@ -8,7 +8,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use("ggplot")
 
 
-USE_TEX = False
+USE_TEX = True
 class Figure:
     def __init__(self, fig):
         self.fig = fig
@@ -97,10 +97,7 @@ def plot_losses(losses, show:bool=True):
     
     if show:
         plt.show()
-    if USE_TEX:
-        return TexFigure(fig) 
-    else:
-        return fig
+    return Figure(fig)
 
 def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
     """

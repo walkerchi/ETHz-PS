@@ -29,8 +29,9 @@ class Darcy(Equation):
     """
     x_dim = 2  # [x1, x2]
     y_dim = 2  # [u, K]
+    k_dim = 1  # [K]
     x_names = ['x1', 'x2']
-    y_names = ['u', 'K']
+    y_names = ['u', 'K']	
     x_boundary = [[0, 10], [0, 10]]
     has_exact_solution = False
 
@@ -53,23 +54,24 @@ class Darcy(Equation):
     def K(cls,u):
         s = cls.s(u)
         return torch.sqrt(s) * (1 - (1 - s**(1/cls.m))**cls.m)**2
-    
     @classmethod
     def correct_y(cls, y):
         k_index = cls.y_names.index('K')
-        y[...,k_index] = cls.ksat * torch.exp(y[...,k_index])
+        y[:, k_index] = y[:, k_index].exp()
         return y
-    
     @classmethod
     def correct_k(cls, k):
-        return  torch.exp(k) / cls.ksat
+        k = k.exp()
+        return k
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.x_b, self.y_b = self.generate_boundary_data()
         x_boundary    = torch.tensor(self.x_boundary).to(self.device)
-        self.x_f_norm = (self.x_f - x_boundary[:, 0]) - 0.5 * (x_boundary[:, 1] - x_boundary[:, 0])
-        self.x_u_norm = (self.x_u - x_boundary[:, 0]) - 0.5 * (x_boundary[:, 1] - x_boundary[:, 0])
+        self.norm_x   = lambda x: (x - x_boundary[:, 0]) / (x_boundary[:, 1] - x_boundary[:, 0])
+
+        self.x_f_norm = self.norm_x(self.x_f)
+        self.x_u_norm = self.norm_x(self.x_u)
 
         self.x_f_norm.requires_grad_(True)
         self.x_u_norm.requires_grad_(True)
@@ -101,8 +103,9 @@ class Darcy(Equation):
         u = u[index]
         k = k[index]
         x = torch.tensor(x)
-        y = torch.tensor(np.concatenate([u,k], 1))
-        y += torch_normal(0, self.noise * y.std(),[n, self.y_dim])
+        # y = torch.tensor(np.concatenate([u,k], 1))
+        y = torch.tensor(u)
+        y += torch_normal(0, self.noise * y.std(),[n, self.y_dim-self.k_dim])
         return x, y
     
     def generate_collosion_data(self, n):
@@ -189,8 +192,10 @@ class Darcy(Equation):
         u_index  = self.y_names.index('u')
         k_index  = self.y_names.index('K')
 
+        y_pred[:, k_index] = y_pred[:, k_index].exp() * self.ksat
+
         N_f    = self.N_f - self.N_b * 4
-        ux  = partial_derivative(y_pred, self.x_f_norm, y_index=u_index)
+        ux     = partial_derivative(y_pred, self.x_f_norm, y_index=u_index)
 
         ux_f, _, ux_b2, ux_b3, ux_b4 = split(ux, *[N_f, *[self.N_b]*4])
     
@@ -198,7 +203,7 @@ class Darcy(Equation):
         # x_f, x_b1, x_b2, x_b3, x_b4 = split(self.x_f_norm, *[self.N_f - self.N_b * 4, *[self.N_b]*4])
        
         # gradx (K(u) gradx u(x1,x2)) = 0
-        k_f     =  y_f[:, k_index]
+        k_f     = y_f[:, k_index]
         ux1_f   = ux_f[:, x1_index]
         ux2_f   = ux_f[:, x2_index]
         kux1_f  = k_f * ux1_f

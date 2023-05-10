@@ -39,6 +39,7 @@ def build_model(args):
         n_hidden_q=args.n_hidden_q,
         n_hidden_t=args.n_hidden_t,
         nn  = args.nn,
+        k_dim = Equation.k_dim if hasattr(Equation, "k_dim") else None,
         lambd = args.lambd,
         beta  = args.beta)
     return model
