@@ -62,7 +62,17 @@ class Darcy(Equation):
     
     @classmethod
     def correct_k(cls, k):
-        return cls.ksat * torch.exp(k)
+        return  torch.exp(k) / cls.ksat
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.x_b, self.y_b = self.generate_boundary_data()
+        x_boundary    = torch.tensor(self.x_boundary).to(self.device)
+        self.x_f_norm = (self.x_f - x_boundary[:, 0]) - 0.5 * (x_boundary[:, 1] - x_boundary[:, 0])
+        self.x_u_norm = (self.x_u - x_boundary[:, 0]) - 0.5 * (x_boundary[:, 1] - x_boundary[:, 0])
+
+        self.x_f_norm.requires_grad_(True)
+        self.x_u_norm.requires_grad_(True)
 
     def generate_boundary_data(self, n = 1000):
         """

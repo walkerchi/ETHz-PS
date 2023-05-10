@@ -3,7 +3,23 @@ import torch
 import numpy as np
 import seaborn as sns
 import pandas as pd
+import tikzplotlib as tikz
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+plt.style.use("ggplot")
+
+
+USE_TEX = False
+class Figure:
+    def __init__(self, fig):
+        self.fig = fig
+    def savefig(self, filename):
+        if USE_TEX:
+            for image_name in ["png", "jpg", "jpeg", "pdf", "svg"]:
+                if filename.endswith(image_name):
+                    filename = filename.replace(image_name, "tex")
+            tikz.save(filename)
+        else:
+            self.fig.savefig(filename)
 
 sns.set()
 
@@ -81,7 +97,10 @@ def plot_losses(losses, show:bool=True):
     
     if show:
         plt.show()
-    return fig
+    if USE_TEX:
+        return TexFigure(fig) 
+    else:
+        return fig
 
 def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
     """
@@ -168,7 +187,7 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
     
     if show:
         plt.show()
-    return fig
+    return Figure(fig)
 
 def plot_y_probability_given_x(equation, prediction, xs=None, show:bool=True):
     """
@@ -231,8 +250,8 @@ def plot_y_probability_given_x(equation, prediction, xs=None, show:bool=True):
             get_ax(i,j).legend()
     if show:
         plt.show()
-    return fig
-        
+    return Figure(fig)
+
 def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row", return_ax:bool=False):
     """
         Plot the 2D-distribution of the prediction and the reference.
@@ -329,8 +348,8 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row", re
     if show:
         plt.show()
     if return_ax:
-        return fig, ax
-    return fig
+        return Figure(fig), ax
+    return Figure(fig)
 
 def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel="", ylabel="", show:bool=False):
     """
@@ -403,7 +422,7 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
   
     if show:
         plt.show()
-    return fig 
+    return Figure(fig) 
     
 
 
