@@ -66,7 +66,6 @@ class Darcy(Equation):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.x_b, self.y_b = self.generate_boundary_data()
         x_boundary    = torch.tensor(self.x_boundary).to(self.device)
         self.norm_x   = lambda x: (x - x_boundary[:, 0]) / (x_boundary[:, 1] - x_boundary[:, 0])
 
@@ -75,6 +74,8 @@ class Darcy(Equation):
 
         self.x_f_norm.requires_grad_(True)
         self.x_u_norm.requires_grad_(True)
+
+        self.to_device()
 
     def generate_boundary_data(self, n = 1000):
         """
@@ -106,6 +107,8 @@ class Darcy(Equation):
         # y = torch.tensor(np.concatenate([u,k], 1))
         y = torch.tensor(u)
         y += torch_normal(0, self.noise * y.std(),[n, self.y_dim-self.k_dim])
+        self.k_u = torch.tensor(k)
+
         return x, y
     
     def generate_collosion_data(self, n):

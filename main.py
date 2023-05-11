@@ -109,7 +109,7 @@ def main(args):
 
         torch.save(pinn.state_dict(), os.path.join(path, f"weight.pth"))
         np.savez(os.path.join(path, "losses.npz"), **losses)
-    
+ 
     prediction = pinn.predict(equation, n_samples=args.eval_n_samples, batch_size=args.eval_batch_size)
     fig = plot_losses(losses, show=False)
     fig.savefig(os.path.join(path,"losses.png"))
@@ -135,8 +135,8 @@ def main(args):
             k_pred = equation.correct_k(k_pred)
             k_exact= equation.K(u)
         lineplot(u, k_exact, k_pred, 
-                 x_points= equation.y_u[:,equation.y_names.index("u")],
-                 y_points= equation.y_u[:,equation.y_names.index("K")],
+                 x_points= equation.y_u[:,0],
+                 y_points= equation.k_u[:,0],
                  xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
 
 def compare(args):
@@ -184,9 +184,10 @@ def compare(args):
             k_pred = {}
             for key,model in zip(targets,models):
                 k_pred[key] =  equation.correct_k(model.nn.stage[-1](u))
+        
         lineplot(u, k_exact, k_pred, 
-                 x_points= equation.y_u[:,equation.y_names.index("u")],
-                 y_points= equation.y_u[:,equation.y_names.index("K")],
+                 x_points= equation.y_u[:,0],
+                 y_points= equation.k_u[:,0],
                  xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
 
 

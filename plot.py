@@ -8,7 +8,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use("ggplot")
 
 
-USE_TEX = True
+USE_TEX = False
 class Figure:
     def __init__(self, fig):
         self.fig = fig
