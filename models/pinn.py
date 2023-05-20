@@ -21,10 +21,9 @@ class PINN(nn.Module):
         y_f_pred = self.nn(x_f)
         regression_loss = torch.mean((y_u_pred - y_u)**2)
         pde_loss = equation.pde_loss(y_f_pred)
-        return regression_loss + pde_loss
+        return regression_loss + pde_loss, regression_loss, pde_loss
 
     def fit(self, equation, epoch=2000, print_every_epoch=100, lr=1e-4, **kwargs):
-        return self.anim_fit(equation, epoch, print_every_epoch, lr, **kwargs)
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         pbar = tqdm(total=epoch, unit="epoch")
         losses = {"loss":[]}
@@ -48,10 +47,14 @@ class PINN(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         losses = {"loss":[]}
 
-        fig, ax = plt.subplots(figsize=(12,8))
+        fig, ax = plt.subplots(figsize=(12,6),ncols=2)
+        pde_loss = []
+        reg_loss = []
+
         def draw():
             with torch.no_grad():
-                ax.clear()
+                ax[0].clear()
+                ax[1].clear()
                 x = equation.x_f_norm
                 y = self.nn(x)
                 u = y[:,0].cpu().numpy()
@@ -59,25 +62,35 @@ class PINN(nn.Module):
                 index = np.argsort(u)
                 u = u[index]
                 k = np.exp(k[index])
-                line = ax.plot(u, k)
-                ax.set_xlabel("u")
-                ax.set_ylabel('k')
-                ax.set_title("u-k")
-                ax.set_xlim(left=-10,right=10)
-                ax.set_ylim(bottom=-1, top=1)
+                line = ax[0].plot(u, k)
+                ax[0].set_xlabel("u")
+                ax[0].set_ylabel('k')
+                ax[0].set_title("u-k")
+                ax[0].set_xlim(left=-10,right=10)
+                ax[0].set_ylim(bottom=-1, top=1)
+                ax[1].set_xlabel("epoch")
+                ax[1].set_ylabel("loss")
+                ax[1].plot(pde_loss, label="pde_loss", color="lightblue")
+                ax[1].plot(reg_loss, label="regression_loss", color="orange")
+                ax[1].set_ylim(top=50)
+                if len(pde_loss) > 0:
+                    ax[1].text(len(pde_loss),pde_loss[-1],str(pde_loss[-1]), color="lightblue")
+                    ax[1].text(len(reg_loss),reg_loss[-1],str(reg_loss[-1]), color="orange")
+                ax[1].legend()
             return line
 
         draw()
         
         def update(ep):
             optimizer.zero_grad()
-            loss = self.loss(equation)
+            loss, reg_l, pde_l = self.loss(equation)
             loss.backward()
             optimizer.step()
-
+            pde_loss.append(pde_l.item())
+            reg_loss.append(reg_l.item())
             if (ep+1)%print_every_epoch == 0:
                 self.eval()
-                loss = self.loss(equation)
+                loss,_,_ = self.loss(equation)
                 losses["loss"].append(loss.item())
                 self.train()
             return draw()

@@ -117,12 +117,6 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
         --------
             fig: the figure
     """
-    if hasattr(equation, 'correct_y'):
-        if isinstance(prediction, dict):
-            for key, value in prediction.items():
-                prediction[key] = equation.correct_y(value)
-        else:
-            prediction = equation.correct_y(prediction)
     x_ref = equation.x_ref
     y_ref = equation.y_ref
     y_pre = prediction
@@ -203,8 +197,6 @@ def plot_y_probability_given_x(equation, prediction, xs=None, show:bool=True):
             fig: the figure
     """
     assert isinstance(xs, (list,tuple))
-    if hasattr(equation, 'correct_y'):
-        prediction = equation.correct_y(prediction)
     fig, ax = plt.subplots(nrows=equation.y_dim,ncols=len(xs), figsize=( len(xs) * 6 ,equation.y_dim*6))
     def get_ax(i,j):
         if equation.y_dim > 1 and len(xs) >1:
@@ -266,12 +258,6 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row", re
     assert align in ["row", "col"]
     assert equation.x_dim == 2
     assert len(equation.ref_shape) == 2
-    if hasattr(equation, 'correct_y'):
-        if isinstance(prediction, dict):
-            for key, value in prediction.items():
-                prediction[key] = equation.correct_y(value)
-        else:
-            prediction = equation.correct_y(prediction)
     x_u = equation.x_u.detach().cpu().numpy()
     x_ref = equation.x_ref.detach().cpu().numpy()
     y_ref = equation.y_ref
@@ -428,6 +414,14 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
 def plot_u_k_relation(prediction, u_exact, k_exact, show=True):
     u_pred = prediction[...,0]
     k_pred = prediction[...,1]
+    if len(u_pred.shape) == 2:
+        u_pred = u_pred.mean(0)
+    index = torch.argsort(u_pred)
+    u_pred = u_pred[index]
+    if len(k_pred.shape) == 2:
+        k_pred = k_pred[:, index]
+    else:
+        k_pred = k_pred[index]
     fig, ax = plt.subplots(figsize=(12,8))
     _lineplot(u_pred, k_pred, ax=ax, label="prediction")
     _lineplot(u_exact, k_exact, ax=ax, label="exact", linestyle="--") 

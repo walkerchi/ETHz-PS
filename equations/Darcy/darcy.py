@@ -57,11 +57,11 @@ class Darcy(Equation):
     @classmethod
     def correct_y(cls, y):
         k_index = cls.y_names.index('K')
-        y[:, k_index] = y[:, k_index].exp()
+        y[..., k_index] = y[..., k_index].exp() * cls.ksat
         return y
     @classmethod
     def correct_k(cls, k):
-        k = k.exp() 
+        k = k.exp() * cls.ksat
         return k
     
     def __init__(self, *args, **kwargs):
@@ -222,6 +222,7 @@ class Darcy(Equation):
         kux2x2_f = partial_derivative(kux2_f, self.x_f_norm, x_index=x2_index)[:N_f]
         loss_f   = mse(kux1x1_f + kux2x2_f)
 
+        
         # u(x1, x2) = u0                x1 = L1
         u_b1    = y_b1[:, u_index]
         loss_b1 = mse(u_b1 - self.u0)
@@ -230,6 +231,7 @@ class Darcy(Equation):
         k_b2    = y_b2[:, k_index]
         ux1_b2  = ux_b2[:, x1_index]
         loss_b2 = mse(self.q + k_b2*ux1_b2)
+        
 
         # du(x1, x2)/dx2 = 0            x2 = 0    
         ux2_b3  = ux_b3[:, x2_index]
