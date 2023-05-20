@@ -61,13 +61,16 @@ class Darcy(Equation):
         return y
     @classmethod
     def correct_k(cls, k):
-        k = k.exp()
+        k = k.exp() 
         return k
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        x_boundary    = torch.tensor(self.x_boundary).to(self.device)
-        self.norm_x   = lambda x: (x - x_boundary[:, 0]) / (x_boundary[:, 1] - x_boundary[:, 0])
+        self.x_boundary = torch.tensor(self.x_boundary).to(self.device)
+        def norm_x(x):
+            return (x - self.x_boundary[:, 0]) / (self.x_boundary[:, 1] - self.x_boundary[:, 0])
+        self.norm_x   = norm_x
+        # self.norm_x   = lambda x: (x - self.x_boundary[:, 0]) / (self.x_boundary[:, 1] - self.x_boundary[:, 0])
 
         self.x_f_norm = self.norm_x(self.x_f)
         self.x_u_norm = self.norm_x(self.x_u)
@@ -76,6 +79,11 @@ class Darcy(Equation):
         self.x_u_norm.requires_grad_(True)
 
         self.to_device()
+    
+    def to_device(self):
+        super().to_device()
+        if isinstance(self.x_boundary, torch.Tensor):
+            self.x_boundary = self.x_boundary.to(self.device)
 
     def generate_boundary_data(self, n = 1000):
         """
@@ -130,7 +138,6 @@ class Darcy(Equation):
             torch_uniform(0, self.L1, [n]),
             torch_uniform(0, self.L2, [n])
         ], -1)
-
 
         self.N_b = 100 
         n = self.N_b
@@ -196,7 +203,7 @@ class Darcy(Equation):
         k_index  = self.y_names.index('K')
 
         y_pred[:, k_index] = y_pred[:, k_index].exp() * self.ksat
-
+    
         N_f    = self.N_f - self.N_b * 4
         ux     = partial_derivative(y_pred, self.x_f_norm, y_index=u_index)
 
@@ -220,7 +227,7 @@ class Darcy(Equation):
         loss_b1 = mse(u_b1 - self.u0)
 
         # -K(u) du(x1, x2) / dx1 = q    x1 = 0
-        k_b2      = y_b2[:, k_index]
+        k_b2    = y_b2[:, k_index]
         ux1_b2  = ux_b2[:, x1_index]
         loss_b2 = mse(self.q + k_b2*ux1_b2)
 

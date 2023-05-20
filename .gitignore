@@ -24,3 +24,12 @@ presentaiton/*.gitignore
 *npm-debug.log*
 *yarn-debug.log*
 *yarn-error.log*
+
+*.out
+*.nav 
+*.aux
+*.toc 
+*.gz 
+*.snm 
+*.log
+*.mp4

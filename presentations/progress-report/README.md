@@ -132,7 +132,7 @@ $$
 ### Darcy
 $$
 \begin{aligned}
-\nabla_\vec x &(K(u)\nabla_\vec x u(\vec x)) = 0  & \vec x&\in [0,L_1]\times [0,L_2]
+\nabla_{\vec x} &(K(u)\nabla_{\vec x} u(\vec x)) = 0  & \vec x&\in [0,L_1]\times [0,L_2]
 \\
 u(\vec x) &= 0 & x_1 &= L_1
 \\

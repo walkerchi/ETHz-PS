@@ -325,9 +325,9 @@ def plot_y_distribution_2D(equation, prediction, show:bool=True, align="row", re
         else:
             raise NotImplementedError()
         if align == "row":
-            fig, ax = plt.subplots(nrows=equation.y_dim, ncols=4, figsize=(20,5*equation.y_dim),squeeze=False)
+            fig, ax = plt.subplots(nrows=equation.y_dim, ncols=line_size, figsize=(5*line_size,5*equation.y_dim),squeeze=False)
         else:
-            fig, ax = plt.subplots(ncols=equation.y_dim, nrows=4, figsize=(12*equation.y_dim,24),squeeze=False)
+            fig, ax = plt.subplots(ncols=equation.y_dim, nrows=line_size, figsize=(12*equation.y_dim,6*line_size),squeeze=False)
             ax      = ax.T
         for i in range(0,equation.y_dim):
             _errormaps(y_ref[...,i], 
@@ -425,6 +425,16 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
         plt.show()
     return Figure(fig) 
     
-
-
-
+def plot_u_k_relation(prediction, u_exact, k_exact, show=True):
+    u_pred = prediction[...,0]
+    k_pred = prediction[...,1]
+    fig, ax = plt.subplots(figsize=(12,8))
+    _lineplot(u_pred, k_pred, ax=ax, label="prediction")
+    _lineplot(u_exact, k_exact, ax=ax, label="exact", linestyle="--") 
+    ax.legend()
+    ax.set_xlabel("u")
+    ax.set_ylabel("k")
+    ax.set_title("u-k")
+    if show:
+        plt.show()
+    return Figure(fig)

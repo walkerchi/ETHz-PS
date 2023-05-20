@@ -8,7 +8,7 @@ import numpy as np
 from models import UQPINN, MLP, StackMLP, PINN
 import equations
 from equations import ODE, Burgers
-from plot import plot_losses, plot_x_y_uncertainty, plot_y_probability_given_x, plot_y_distribution_2D, lineplot
+from plot import plot_losses, plot_x_y_uncertainty, plot_y_probability_given_x, plot_y_distribution_2D, lineplot, plot_u_k_relation
 
 
 def manul_seed(seed):
@@ -131,13 +131,12 @@ def main(args):
         plot_y_distribution_2D(equation, prediction, align="row", show=False).savefig(os.path.join(path,"y_distribution_2D.png"))
         with torch.no_grad():
             u = torch.linspace(-10, -4, 100)[:, None].to(pinn.device)
-            k_pred = pinn.nn.stage[-1](u)
-            k_pred = equation.correct_k(k_pred)
             k_exact= equation.K(u)
-        lineplot(u, k_exact, k_pred, 
-                 x_points= equation.y_u[:,0],
-                 y_points= equation.k_u[:,0],
-                 xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
+        plot_u_k_relation(prediction, u, k_exact, show=False).savefig(os.path.join(path,"y_relation_2D.png"))
+        # lineplot(u, k_exact, k_pred, 
+        #          x_points= equation.y_u[:,0],
+        #          y_points= equation.k_u[:,0],
+        #          xlabel="$u$", ylabel="$K(u)$", show=False).savefig(os.path.join(path,"y_relation_2D.png"))
 
 def compare(args):
     manul_seed(args.seed)

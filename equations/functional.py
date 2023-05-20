@@ -34,7 +34,7 @@ def partial_derivative(y, x, y_index=None, x_index=slice(None)):
         grad = torch.zeros_like(y)
         grad[...,y_index] = 1
     grad_x = torch.autograd.grad(y, x, grad, create_graph=True)[0]
-    return grad_x[x_index]
+    return grad_x[...,x_index]
 
 def torch_uniform(a, b, size):
     return (b - a) * torch.rand(size) + a
