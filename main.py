@@ -119,7 +119,10 @@ def main(args):
             equation.y_ref,
             prediction,
             xlabel="$x$", 
-            ylabel="$u$", 
+            ylabel="$u(x)$",
+            title =f"{args.model}-{args.equation}" ,
+            x_points=equation.x_u,
+            y_points=equation.y_u,
             show=False).savefig(os.path.join(path,"x_y_relation_2D.png"))
         # plot_x_y_uncertainty(equation, prediction, show=False).savefig(os.path.join(path,"x_y_uncertainty.png"))
         if prediction.dim() == 3:

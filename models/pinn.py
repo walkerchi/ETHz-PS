@@ -21,7 +21,7 @@ class PINN(nn.Module):
         y_f_pred = self.nn(x_f)
         regression_loss = torch.mean((y_u_pred - y_u)**2)
         pde_loss = equation.pde_loss(y_f_pred)
-        return regression_loss + pde_loss, regression_loss, pde_loss
+        return regression_loss + pde_loss
 
     def fit(self, equation, epoch=2000, print_every_epoch=100, lr=1e-4, **kwargs):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)

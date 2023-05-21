@@ -4,9 +4,38 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 import tikzplotlib as tikz
+import matplotlib as mpl
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use("ggplot")
 
+def figsize(scale, nplots = 1):
+    fig_width_pt = 390.0                          # Get this from LaTeX using \the\textwidth
+    inches_per_pt = 1.0/72.27                       # Convert pt to inch
+    golden_mean = (np.sqrt(5.0)-1.0)/2.0            # Aesthetic ratio (you could change this)
+    fig_width = fig_width_pt*inches_per_pt*scale    # width in inches
+    fig_height = nplots*fig_width*golden_mean              # height in inches
+    fig_size = [fig_width,fig_height]
+    return fig_size
+
+# pgf_with_latex = {                      # setup matplotlib to use latex for output
+#     "pgf.texsystem": "pdflatex",        # change this if using xetex or lautex
+#     "text.usetex": True,                # use LaTeX to write all text
+#     "font.family": "serif",
+#     "font.serif": [],                   # blank entries should cause plots to inherit fonts from the document
+#     "font.sans-serif": [],
+#     "font.monospace": [],
+#     "axes.labelsize": 10,               # LaTeX default is 10pt font.
+#     "font.size": 10,
+#     "legend.fontsize": 8,               # Make the legend/label fonts a little smaller
+#     "xtick.labelsize": 8,
+#     "ytick.labelsize": 8,
+#     "figure.figsize": figsize(1.0),     # default fig size of 0.9 textwidth
+#     "pgf.preamble": [
+#         r"\usepackage[utf8x]{inputenc}",    # use utf8 fonts becasue your computer can handle it :)
+#         r"\usepackage[T1]{fontenc}",        # plots will be generated using this preamble
+#         ]
+# }
+# mpl.rcParams.update(pgf_with_latex)
 
 USE_TEX = False
 class Figure:
@@ -19,7 +48,8 @@ class Figure:
                     filename = filename.replace(image_name, "tex")
             tikz.save(filename)
         else:
-            self.fig.savefig(filename)
+            self.fig.savefig(filename,bbox_inches='tight')
+            self.fig.savefig(filename.split(".")[0]+".pdf",bbox_inches='tight')
 
 sns.set()
 
@@ -56,9 +86,9 @@ def _heatmap(data, fig, ax, extent, xabel="", ylabel="", title=""):
     fig.colorbar(h, cax=cax, orientation='vertical')
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_xlabel(xabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    ax.set_xlabel(xabel,fontsize=14)
+    ax.set_ylabel(ylabel,fontsize=14)
+    ax.set_title(title,fontsize=18)
 
 def _errormaps(exact, pred, fig, ax, extent, xlabel="", ylabel="",prefix="", title=""):
     if isinstance(exact, torch.Tensor):
@@ -99,7 +129,7 @@ def plot_losses(losses, show:bool=True):
         plt.show()
     return Figure(fig)
 
-def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
+def plot_x_y_uncertainty(equation, prediction, condition=None, title="", show:bool=True):
     """
         Plot the uncertainty of the prediction on x_ref.
         Parameters:
@@ -117,8 +147,8 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
         --------
             fig: the figure
     """
-    x_ref = equation.x_ref
-    y_ref = equation.y_ref
+    x_ref = equation.x_ref.detach().cpu().numpy()
+    y_ref = equation.y_ref.detach().cpu().numpy()
     y_pre = prediction
     x_u   = equation.x_u.detach().cpu().numpy() # [n_u, x_dim]
     y_u   = equation.y_u.detach().cpu().numpy() # [n_u, y_dim]
@@ -140,9 +170,10 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
             else:
                 _lineplot(x_ref, y_ref[...,i], get_ax(i), label="Exact", color="b", linestyle="-")
                 _lineplot(x_ref, y_pre[...,i], get_ax(i), label="Prediction", color="r", linestyle="--")
-            get_ax(i).set_title(f"${equation.x_names[0]}$-${equation.y_names[i]}$")
-            get_ax(i).set_xlabel(f"${equation.x_names[0]}$")
-            get_ax(i).set_ylabel(f"${equation.y_names[i]}$")
+            get_ax(i).set_title(f"${equation.x_names[0]}$-${equation.y_names[i]}$", fontsize=18)
+            get_ax(i).set_xlabel(f"${equation.x_names[0]}$", fontsize=14)
+            get_ax(i).set_ylabel(f"${equation.y_names[i]}$", fontsize=14)
+            get_ax(i).set_title(f"{title} ${equation.x_names[0]}-{equation.y_names[i]}$")
             get_ax(i).scatter(x_u[:, 0], y_u[:, i], c='k', marker='x', label='Observations/BCs')
             get_ax(i).legend()
 
@@ -151,6 +182,7 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
         for i in range(equation.y_dim):
             for j,cond in enumerate(condition):
                 assert len(cond) + 1 == equation.x_dim
+
                 mask = np.ones(x_ref.shape[0], dtype=bool)
                 index = list(range(equation.x_dim))
                 for k, v in cond.items():
@@ -163,12 +195,13 @@ def plot_x_y_uncertainty(equation, prediction, condition=None, show:bool=True):
                     for key, value in y_pre.items():
                         _lineplot(x_ref, value[...,mask,i], ax[i, j], label=key, color=None, linestyle="--")
                 else:
-                    _lineplot(x_ref, y_ref[...,mask,i], ax[i, j], label="Exact", color="b", linestyle="-")
-                    _lineplot(x_ref, y_pre[...,mask,i], ax[i, j], label="Prediction", color="r", linestyle="--")
+                    _lineplot(x_ref[...,mask,index], y_ref[...,mask,i], ax[i, j], label="Exact", color="b", linestyle="-")
+                    _lineplot(x_ref[...,mask,index], y_pre[...,mask,i], ax[i, j], label="Prediction", color="r", linestyle="--")
 
-                ax[i, j].set_title(" ".join(f"${k}={v}$" for k,v in cond.items()))
-                ax[i, j].set_xlabel(f"${equation.x_names[index]}$")
-                ax[i, j].set_ylabel(f"${equation.y_names[i]}$")
+                ax[i, j].set_title(" ".join(f"${k}={v}$" for k,v in cond.items()), fontsize=18)
+                ax[i, j].set_xlabel(f"${equation.x_names[index]}$",fontsize=14)
+                ax[i, j].set_ylabel(f"${equation.y_names[i]}$", fontsize=14)
+                # ax[i, j].set_title(f"{title} ${equation.x_names[index]}-{equation.y_names[i]}$")
                 mask = np.ones(x_u.shape[0], dtype=bool)
                 for k, v in cond.items():
                     x_ind = equation.x_names.index(k)
@@ -233,9 +266,9 @@ def plot_y_probability_given_x(equation, prediction, xs=None, show:bool=True):
                         kde=True,
                         element="step", 
                         label="Prediction")
-            get_ax(i,j).set_xlabel(f"${equation.y_names[i]}({equation.x_names[i]}={x})$")
-            get_ax(i,j).set_ylabel(f"$p(u)$")
-            get_ax(i,j).set_title(f"${equation.y_names[i]}({equation.x_names[i]}={x})$ distribution")
+            get_ax(i,j).set_xlabel(f"${equation.y_names[i]}({equation.x_names[i]}={x})$", fontsize=14)
+            get_ax(i,j).set_ylabel(f"$p(u)$", fontsize=14)
+            get_ax(i,j).set_title(f"${equation.y_names[i]}({equation.x_names[i]}={x})$ distribution", fontsize=18)
             get_ax(i,j).legend()
     if show:
         plt.show()
@@ -384,14 +417,14 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
     #     assert len(y_pred.shape) == 1
     #     ax.plot(x, y_pred, label="prediction", color="r", linestyle="--")
     
-    fig, ax = plt.subplots(figsize=(10,10))
+    fig, ax = plt.subplots(figsize=(10,6))
 
     if isinstance(y_pred, dict):
-        _lineplot(x, y_exact, ax= ax, label="exact", color=None, linestyle="--")
+        _lineplot(x, y_exact, ax= ax, label="exact", color=None, linestyle="-")
         for k,v in y_pred.items():
             _lineplot(x, v, ax= ax, label=f"{k} prediction", color=None, linestyle="--")
     else:
-        _lineplot(x, y_exact, ax= ax, label="exact", color="b", linestyle="--")
+        _lineplot(x, y_exact, ax= ax, label="exact", color="b", linestyle="-")
         _lineplot(x, y_pred, ax= ax, label="prediction", color="r", linestyle="--")
 
     if x_points is not None:
@@ -400,11 +433,11 @@ def lineplot(x, y_exact, y_pred, x_points=None, y_points=None, title="", xlabel=
             x_points = x_points.detach().cpu().numpy().flatten()
         if isinstance(y_points, torch.Tensor):
             y_points = y_points.detach().cpu().numpy().flatten()
-        ax.scatter(x_points, y_points, c="k", s=1, label="given data points")
+        ax.scatter(x_points, y_points, c="k", s=1, label="boundary points", marker="x")
     ax.legend()
-    ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    ax.set_title(title, fontsize=20)
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_ylabel(ylabel, fontsize=16)
 
   
     if show:
